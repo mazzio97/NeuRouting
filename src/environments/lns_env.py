@@ -23,12 +23,17 @@ class LargeNeighborhoodSearch:
         self.operators = operators
         self.n_operators = len(operators)
         self.adaptive = adaptive
-        self.performances = np.array([1.0 / self.n_operators] * self.n_operators) if adaptive else None
+        self.performances = np.array([np.inf] * self.n_operators) if adaptive else None
 
     def select_operator_pair(self) -> Tuple[DestroyProcedure, RepairProcedure, int]:
         if self.adaptive:
-            probs = self.performances / self.performances.sum()
-            idx = np.random.choice(range(self.n_operators), p=probs)
+            if np.inf in self.performances:
+                indices = np.where(self.performances == np.inf)[0]
+                idx = np.random.choice(indices)
+            else:
+                perf = self.performances + abs(min(self.performances))
+                probs = perf / perf.sum()
+                idx = np.random.choice(range(self.n_operators), p=probs)
         else:
             idx = np.random.randint(0, self.n_operators)
         return self.operators[idx].destroy, self.operators[idx].repair, idx
@@ -39,8 +44,8 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
                  operators: List[LNSOperator],
                  neighborhood_size: int,
                  initial=nearest_neighbor_solution,
-                 adaptive=False,
-                 name="LNS"):
+                 adaptive=True,
+                 name="lns"):
         LargeNeighborhoodSearch.__init__(self, operators, initial, adaptive)
         VRPEnvironment.__init__(self, name)
         self.neighborhood_size = neighborhood_size
@@ -84,13 +89,14 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
 
     def solve(self, instance: VRPInstance, max_steps=None, time_limit=None, record=False) -> VRPSolution:
         self.reset(instance)
+        initial_cost = self.solution.cost()
         self.max_steps = max_steps if max_steps is not None else self.max_steps
         self.time_limit = time_limit if time_limit is not None else self.time_limit
         self.history = [] if record else None
 
         start_time = time.time()
         while self.n_steps < self.max_steps and time.time() - start_time < self.time_limit:
-            # Create a envs of copies of the same solution that can be repaired in parallel
+            # Create neighborhood_size copies of the same solution that can be repaired in parallel
             self.neighborhood = [deepcopy(self.solution) for _ in range(self.neighborhood_size)]
             criteria = self.step()
 
@@ -106,6 +112,9 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
                 # self.solution.verify()
 
         self.solution = self.incumbent_solution
+        final_cost = self.solution.cost()
+        self.gap = (initial_cost - final_cost) / final_cost * 100
+
         if record:
             self.history.append(deepcopy(self.incumbent_solution))
             record_gif(self.history,

@@ -18,7 +18,7 @@ class SimAnnealingLNSEnvironment(LNSEnvironment):
                  reset_percentage: float = 0.8,
                  n_reheating: int = 5,
                  adaptive=False,
-                 name="SA LNS"):
+                 name="lns_sa"):
         super(SimAnnealingLNSEnvironment, self).__init__(operators, neighborhood_size, initial, adaptive, name)
         self.reset_percentage = reset_percentage
         self.n_reheating = n_reheating

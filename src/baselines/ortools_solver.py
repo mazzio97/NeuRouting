@@ -6,9 +6,9 @@ from instances.vrp_solution import Route
 from utils.vrp_io import read_vrp, GRID_DIM
 
 
-class OrToolsSolver(VRPSolver):
+class ORToolsSolver(VRPSolver):
     def __init__(self):
-        super().__init__("OR-Tools")
+        super().__init__("ortools")
         self._data = None
         self._manager = None
         self._routing = None
@@ -78,6 +78,6 @@ class OrToolsSolver(VRPSolver):
 
 if __name__ == "__main__":
     inst = read_vrp("../../res/A-n32-k5.vrp", grid_dim=100)
-    or_solver = OrToolsSolver()
+    or_solver = ORToolsSolver()
     or_solver.solve(inst, time_limit=20)
     or_solver.render()

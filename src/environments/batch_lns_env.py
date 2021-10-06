@@ -17,7 +17,7 @@ class BatchLNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
     def __init__(self, batch_size: int,
                  operators: List[LNSOperator],
                  initial=nearest_neighbor_solution):
-        VRPEnvironment.__init__(self, "Batch LNS")
+        VRPEnvironment.__init__(self, "batch_lns")
         LargeNeighborhoodSearch.__init__(self, operators, initial, False)
         self.batch_size = batch_size
         self.instance = None

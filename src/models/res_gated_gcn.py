@@ -83,6 +83,7 @@ class ResidualGatedGCNModel(nn.Module):
             # y_pred_nodes: Predictions for nodes (batch_size, num_nodes)
             loss: Value of loss function
         """
+        self.eval()
         with torch.no_grad():
             # Node and edge embedding
             x_vals = self.nodes_coord_embedding(x_nodes_coord)  # B x V x H

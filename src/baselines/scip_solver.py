@@ -9,7 +9,7 @@ from utils.vrp_io import read_vrp
 
 class SCIPSolver(VRPSolver):
     def __init__(self, lns_only=False):
-        super().__init__("SCIP")
+        super().__init__("scip")
         self.model = None
         self.lns_only = lns_only
 

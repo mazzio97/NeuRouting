@@ -38,6 +38,7 @@ class VRPEnvironment(VRPSolver):
         self.improvements = 0
         self.max_steps = INF
         self.time_limit = INF
+        self.gap = None
 
     def reset(self, instance, **args):
         self.instance = instance

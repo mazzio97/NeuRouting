@@ -3,9 +3,11 @@ pretrained/*.pt
 pretrained/*.tar
 pretrained/*/*.tar
 pretrained/*/*.pt
-LKH3
+LKH
 *.pkl
 wandb
+res/stats
+res/recordings
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

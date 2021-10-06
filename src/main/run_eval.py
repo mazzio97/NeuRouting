@@ -1,33 +1,78 @@
+import argparse
 import sys
+from typing import List
+
+import torch
+
+from baselines import SCIPSolver, ORToolsSolver, LKHSolver
+from environments import VRPSolver
 
 sys.path.append("src")
 
-from baselines import LKHSolver, SCIPSolver, OrToolsSolver
 from generators import generate_multiple_instances
 from main.evaluator import Evaluator
 from nlns.builder import nlns_builder
 
+parser = argparse.ArgumentParser(description='Evaluate Neural VRP')
+parser.add_argument('-n', '--n_instances', type=int, required=True)
+parser.add_argument('-c', '--n_customers', type=int, required=True)
+parser.add_argument('-dm', '--destroy_methods', nargs='+')
+parser.add_argument('-dp', '--destroy_percentage', nargs='+')
+parser.add_argument('-rm', '--repair_methods', nargs='+')
+parser.add_argument('-t', '--time_limit', type=int, default=60)
+parser.add_argument('-max', '--max_steps', type=int, required=False)
+parser.add_argument('-ns', '--neighborhood_size', type=int, default=64)
+parser.add_argument('-sa', '--simulated_annealing', action='store_true', default=False)
+parser.add_argument('-a', '--adaptive', action='store_true', default=False)
+parser.add_argument('-b', '--baselines', nargs='+', required=False)
+args = parser.parse_args()
+
+
 if __name__ == "__main__":
-    n_customers = 100
-    n_instances = 100
-    max_steps = n_customers
-    time_limit = 60
-    neigh_size = 256
-    ckpt_path = "./pretrained/"
+    print(args)
 
-    eval_instances = generate_multiple_instances(n_instances=n_instances, n_customers=n_customers, seed=0)
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    print(f"Using {device} for evaluation.")
 
-    destroy_operators = {"point": [0.15, 0.25], "tour": [0.15, 0.25]}
+    ckpt_path = "./pretrained/n50/"
 
-    greedy_env = nlns_builder(destroy_operators, ["greedy"], neigh_size,
-                              simulated_annehaling=False, ckpt_path=ckpt_path, name="Greedy")
-    rlagent_env = nlns_builder(destroy_operators, ["rlagent"], neigh_size,
-                               simulated_annehaling=False, ckpt_path=ckpt_path, name="RL Agent")
-    scip_solver = SCIPSolver()
-    ortools_solver = OrToolsSolver()
-    lkh_solver = LKHSolver("./executables/LKH3")
+    eval_instances = generate_multiple_instances(n_instances=args.n_instances, n_customers=args.n_customers, seed=0)
 
-    evaluator = Evaluator([greedy_env, rlagent_env, scip_solver, ortools_solver, lkh_solver])
+    baselines = [SCIPSolver(), ORToolsSolver(), LKHSolver("./executables/LKH")]
+    solvers: List[VRPSolver] = [solver for name in args.baselines for solver in baselines if name == solver.name]
 
-    stats = evaluator.compare(eval_instances, max_steps=max_steps, time_limit=time_limit)
-    print(stats.mean_cost())
+    destroy_percentage = [float(percentage) for percentage in args.destroy_percentage]
+
+    if args.adaptive:
+        name = 'destroy_' + '+'.join(args.destroy_methods) + "_repair_" + '+'.join(args.repair_methods)
+        if args.simulated_annealing:
+            name += '_sa'
+        destroy_names = {method: destroy_percentage for method in args.destroy_methods}
+        adaptive_lns_env = nlns_builder(destroy_names=destroy_names,
+                                        repair_names=args.repair_methods,
+                                        neighborhood_size=args.neighborhood_size,
+                                        name=name,
+                                        simulated_annealing=args.simulated_annealing,
+                                        device=device,
+                                        ckpt_path=ckpt_path)
+        solvers.append(adaptive_lns_env)
+    else:
+        for destroy in args.destroy_methods:
+            for repair in args.repair_methods:
+                name = 'destroy_' + destroy + "_repair_" + repair
+                if args.simulated_annealing:
+                    name += '_sa'
+                lns_env = nlns_builder(destroy_names={destroy: destroy_percentage},
+                                       repair_names=repair,
+                                       neighborhood_size=args.neighborhood_size,
+                                       name=name,
+                                       simulated_annealing=args.simulated_annealing,
+                                       device=device,
+                                       ckpt_path=ckpt_path)
+                solvers.append(lns_env)
+
+    evaluator = Evaluator(solvers)
+
+    stats = evaluator.compare(eval_instances, max_steps=args.max_steps, time_limit=args.time_limit)
+    for solver, df in stats.to_dataframe().items():
+        df.to_csv(f"./res/stats/{solver.name}_n{args.n_customers}.csv")

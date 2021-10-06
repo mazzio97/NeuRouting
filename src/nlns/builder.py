@@ -38,8 +38,8 @@ def nlns_builder(destroy_names: Dict[str, Union[float, List[float]]],
                  repair_names: List[str],
                  neighborhood_size: int,
                  initial=nearest_neighbor_solution,
-                 simulated_annehaling=False,
-                 name="NLNS",
+                 simulated_annealing=False,
+                 name="nlns",
                  device="cpu",
                  ckpt_path="./pretrained/") -> LNSEnvironment:
     lns_operators_pairs = np.array(np.meshgrid(list(destroy_names.keys()), repair_names)).T.reshape(-1, 2)
@@ -52,7 +52,7 @@ def nlns_builder(destroy_names: Dict[str, Union[float, List[float]]],
         for percentage in destroy_p:
             lns_operators.append(get_lns_operator(destroy, repair, percentage, device, ckpt_path))
 
-    lns_env = SimAnnealingLNSEnvironment if simulated_annehaling else LNSEnvironment
+    lns_env = SimAnnealingLNSEnvironment if simulated_annealing else LNSEnvironment
 
     return lns_env(lns_operators, neighborhood_size, initial, name=name)
 
