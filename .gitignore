@@ -8,6 +8,7 @@ LKH
 wandb
 res/stats
 res/recordings
+src/experimental
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

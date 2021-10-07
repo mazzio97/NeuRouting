@@ -1,14 +1,12 @@
 import argparse
 import sys
 from typing import List
-
 import torch
-
-from baselines import SCIPSolver, ORToolsSolver, LKHSolver
-from environments import VRPSolver
 
 sys.path.append("src")
 
+from baselines import SCIPSolver, ORToolsSolver, LKHSolver
+from environments import VRPSolver
 from generators import generate_multiple_instances
 from main.evaluator import Evaluator
 from nlns.builder import nlns_builder
@@ -34,42 +32,43 @@ if __name__ == "__main__":
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} for evaluation.")
 
-    ckpt_path = "./pretrained/n50/"
+    ckpt_path = "./pretrained/"
 
     eval_instances = generate_multiple_instances(n_instances=args.n_instances, n_customers=args.n_customers, seed=0)
 
     baselines = [SCIPSolver(), ORToolsSolver(), LKHSolver("./executables/LKH")]
     solvers: List[VRPSolver] = [solver for name in args.baselines for solver in baselines if name == solver.name]
 
-    destroy_percentage = [float(percentage) for percentage in args.destroy_percentage]
+    if args.destroy_percentage is not None:
+        destroy_percentage = [float(percentage) for percentage in args.destroy_percentage]
 
-    if args.adaptive:
-        name = 'destroy_' + '+'.join(args.destroy_methods) + "_repair_" + '+'.join(args.repair_methods)
-        if args.simulated_annealing:
-            name += '_sa'
-        destroy_names = {method: destroy_percentage for method in args.destroy_methods}
-        adaptive_lns_env = nlns_builder(destroy_names=destroy_names,
-                                        repair_names=args.repair_methods,
-                                        neighborhood_size=args.neighborhood_size,
-                                        name=name,
-                                        simulated_annealing=args.simulated_annealing,
-                                        device=device,
-                                        ckpt_path=ckpt_path)
-        solvers.append(adaptive_lns_env)
-    else:
-        for destroy in args.destroy_methods:
-            for repair in args.repair_methods:
-                name = 'destroy_' + destroy + "_repair_" + repair
-                if args.simulated_annealing:
-                    name += '_sa'
-                lns_env = nlns_builder(destroy_names={destroy: destroy_percentage},
-                                       repair_names=repair,
-                                       neighborhood_size=args.neighborhood_size,
-                                       name=name,
-                                       simulated_annealing=args.simulated_annealing,
-                                       device=device,
-                                       ckpt_path=ckpt_path)
-                solvers.append(lns_env)
+        if args.adaptive:
+            name = 'destroy_' + '+'.join(args.destroy_methods) + "_repair_" + '+'.join(args.repair_methods)
+            if args.simulated_annealing:
+                name += '_sa'
+            destroy_names = {method: destroy_percentage for method in args.destroy_methods}
+            adaptive_lns_env = nlns_builder(destroy_names=destroy_names,
+                                            repair_names=args.repair_methods,
+                                            neighborhood_size=args.neighborhood_size,
+                                            name=name,
+                                            simulated_annealing=args.simulated_annealing,
+                                            device=device,
+                                            ckpt_path=ckpt_path)
+            solvers.append(adaptive_lns_env)
+        else:
+            for destroy in args.destroy_methods:
+                for repair in args.repair_methods:
+                    name = 'destroy_' + destroy + "_repair_" + repair
+                    if args.simulated_annealing:
+                        name += '_sa'
+                    lns_env = nlns_builder(destroy_names={destroy: destroy_percentage},
+                                           repair_names=repair,
+                                           neighborhood_size=args.neighborhood_size,
+                                           name=name,
+                                           simulated_annealing=args.simulated_annealing,
+                                           device=device,
+                                           ckpt_path=ckpt_path)
+                    solvers.append(lns_env)
 
     evaluator = Evaluator(solvers)
 
