@@ -19,12 +19,13 @@ from utils.visualize import plot_heatmap
 
 class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
 
-    def __init__(self, model: ResidualGatedGCNModel, percentage, num_neighbors=-1, device="cpu", logger=None):
+    def __init__(self, model: ResidualGatedGCNModel, percentage, greedy=False, num_neighbors=-1, device="cpu", logger=None):
         super(ResidualGatedGCNDestroy, self).__init__(nn.DataParallel(model), device, logger)
         self.num_neighbors = num_neighbors
         self.current_instances = None
         self.edges_probs = None
         self.percentage = percentage
+        self.greedy = greedy
 
     @staticmethod
     def plot_solution_heatmap(instance, sol_edges, sol_edges_probs):
@@ -64,7 +65,10 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
             sol_nodes_probs[c1] += prob if c1 != 0 else 0
             sol_nodes_probs[c2] += prob if c2 != 0 else 0
         sol_nodes_probs_norm = sol_nodes_probs / sol_nodes_probs.sum()
-        return np.random.choice(range(n_nodes), size=n_remove, p=sol_nodes_probs_norm, replace=False)
+        if self.greedy:
+            return np.argsort(sol_nodes_probs_norm)[-n_remove:]
+        else:
+            return np.random.choice(range(n_nodes), size=n_remove, p=sol_nodes_probs_norm, replace=False)
 
     def multiple(self, solutions: List[VRPSolution]):
         instances = [sol.instance for sol in solutions]

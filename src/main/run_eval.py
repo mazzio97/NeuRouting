@@ -37,7 +37,10 @@ if __name__ == "__main__":
     eval_instances = generate_multiple_instances(n_instances=args.n_instances, n_customers=args.n_customers, seed=0)
 
     baselines = [SCIPSolver(), ORToolsSolver(), LKHSolver("./executables/LKH")]
-    solvers: List[VRPSolver] = [solver for name in args.baselines for solver in baselines if name == solver.name]
+    if args.baselines is not None:
+        solvers: List[VRPSolver] = [solver for name in args.baselines for solver in baselines if name == solver.name]
+    else:
+        solvers = []
 
     if args.destroy_percentage is not None:
         destroy_percentage = [float(percentage) for percentage in args.destroy_percentage]
