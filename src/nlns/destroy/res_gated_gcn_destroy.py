@@ -74,8 +74,14 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         instances = [sol.instance for sol in solutions]
         if self.current_instances is None or instances != self.current_instances:
             self.current_instances = instances
-            edges_preds, _ = self.model.forward(*self.features(instances))
-            prob_preds = torch.log_softmax(edges_preds, -1)[:, :, :, -1].to(self.device)
+            n_instances = len(self.current_instances)
+            batch_size = 64
+            all_edges_preds = []
+            for batch_idx in range(0, n_instances, batch_size):
+                edges_preds, _ = self.model.forward(*self.features(instances[batch_idx:min(batch_idx + batch_size, n_instances)]))
+                all_edges_preds.append(edges_preds)
+            all_edges_preds = torch.cat(all_edges_preds, dim=0)
+            prob_preds = torch.log_softmax(all_edges_preds, -1)[:, :, :, -1].to(self.device)
             self.edges_probs = np.exp(prob_preds.detach().cpu())
 
         for sol, probs in zip(solutions, self.edges_probs):

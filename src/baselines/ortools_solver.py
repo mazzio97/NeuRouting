@@ -15,7 +15,7 @@ class ORToolsSolver(VRPSolver):
 
     def reset(self, instance: VRPInstance):
         self.instance = instance
-        n_vehicles = int(sum(instance.demands) // instance.capacity) + 1
+        n_vehicles = instance.n_customers  # int(sum(instance.demands) // instance.capacity) + 2
         self._data = {
             'distance_matrix': instance.distance_matrix * GRID_DIM,
             'demands': [0] + instance.demands,
@@ -79,5 +79,5 @@ class ORToolsSolver(VRPSolver):
 if __name__ == "__main__":
     inst = read_vrp("../../res/A-n32-k5.vrp", grid_dim=100)
     or_solver = ORToolsSolver()
-    or_solver.solve(inst, time_limit=20)
+    or_solver.solve(inst, time_limit=10)
     or_solver.render()
