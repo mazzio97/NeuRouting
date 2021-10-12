@@ -102,6 +102,10 @@ class VRPNeuralSolution(VRPSolution):
         super(VRPNeuralSolution, self).destroy_nodes(to_remove)
         self._sync_neural_routes()
 
+    def destroy_edges(self, to_remove: List[tuple]):
+        super(VRPNeuralSolution, self).destroy_edges(to_remove)
+        self._sync_neural_routes()
+
     def connect(self, id_from, id_to):
         """Performs an action. The tour end represented by input with the id id_from is connected to the tour end
          presented by the input with id id_to."""

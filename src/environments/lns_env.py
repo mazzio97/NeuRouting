@@ -26,7 +26,7 @@ class LargeNeighborhoodSearch:
         self.performances = np.array([np.inf] * self.n_operators) if adaptive else None
 
     def select_operator_pair(self) -> Tuple[DestroyProcedure, RepairProcedure, int]:
-        if self.adaptive:
+        if self.adaptive and self.n_operators > 1:
             if np.inf in self.performances:
                 indices = np.where(self.performances == np.inf)[0]
                 idx = np.random.choice(indices)
