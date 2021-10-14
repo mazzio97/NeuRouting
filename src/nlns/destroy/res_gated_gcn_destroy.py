@@ -59,8 +59,10 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
 
     def multiple(self, solutions: List[VRPSolution]):
         instances = [sol.instance for sol in solutions]
+        instances = set(instances)
         if self.current_instances is None or instances != self.current_instances:
             self.current_instances = instances
+            instances = list(instances)
             n_instances = len(self.current_instances)
             batch_size = 64
             all_edges_preds = []
@@ -70,6 +72,8 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
             all_edges_preds = torch.cat(all_edges_preds, dim=0)
             prob_preds = torch.log_softmax(all_edges_preds, -1)[:, :, :, -1].to(self.device)
             self.edges_probs = np.exp(prob_preds.detach().cpu())
+            if n_instances == 1:
+                self.edges_probs = [self.edges_probs[0]] * len(solutions)
 
         for sol, probs in zip(solutions, self.edges_probs):
             sol.verify()
