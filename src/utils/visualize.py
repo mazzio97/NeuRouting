@@ -60,8 +60,11 @@ def plot_solution(ax, solution, title=None, customer_color='orange', incomplete_
     for c in solution.isolated_customers():
         ax.scatter(coords[c][0], coords[c][1], color=customer_color, s=node_sizes[c])
 
-    if title is not None:
-        ax.set_title(f"{title}: {solution.cost():.4f}")
+    if title is None:
+        title = f"{solution.cost():.4f}"
+    else:
+        title += f": {solution.cost():.4f}"
+    ax.set_title(title)
 
     return get_image(dpi=dpi) if to_img else None
 

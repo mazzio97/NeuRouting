@@ -1,4 +1,3 @@
-import re
 from matplotlib import pyplot as plt
 
 from environments import VRPSolver
@@ -22,16 +21,17 @@ class SCIPSolver(VRPSolver):
         self.reset(instance)
         self.model.setParam("limits/time", time_limit)
         self.model.optimize()
-        assignment = {var.name: self.model.getVal(var) for var in self.model.getVars() if 'x' in var.name}
-        edges = [tuple([int(n) for n in re.findall(r'\d+', name)])
-                 for name, val in assignment.items() if val > 0.99]
+        best_sol = self.model.getBestSol()
+        assignment = {var.name: self.model.getSolVal(best_sol, var) for var in self.model.getVars() if 'x' in var.name}
+        edges_vars = [name for name, val in assignment.items() if val > 0.99]
+        edges = self.model.vars_to_edges(edges_vars)
         self.solution = VRPSolution.from_edges(instance=self.instance, edges=edges)
         return self.solution
 
 
 if __name__ == "__main__":
-    inst = read_vrp("../../res/A-n32-k5.vrp", grid_dim=100)
+    inst = read_vrp("../../res/instances/A-n32-k5.vrp", grid_dim=100)
     scipsolver = SCIPSolver(lns_only=False)
-    sol = scipsolver.solve(inst, time_limit=10)
-    inst.plot(sol)
+    sol = scipsolver.solve(inst, time_limit=30)
+    sol.plot()
     plt.show()

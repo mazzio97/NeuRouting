@@ -37,6 +37,10 @@ class VRPModelSCIP(Model):
         for j in N:
             self.addCons(quicksum(x[i, j] for i in V if j != i) == 1)
 
+        for h in N:
+            self.addCons(quicksum(x[i, h] for i in V if i != h) ==
+                         quicksum(x[h, i] for i in V if i != h))
+
         for (i, j) in x:
             if i != 0 and j != 0:
                 self.addCons((u[i - 1] + q[j - 1]) * x[i, j] == u[j - 1] * x[i, j])

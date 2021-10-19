@@ -15,6 +15,9 @@ class LKHSolver(VRPSolver):
     def reset(self, instance: VRPInstance):
         self.instance = instance
 
+    def initial_solution(self, instance: VRPInstance):
+        return self.solve(instance, max_steps=1)
+
     def solve(self, instance: VRPInstance, max_steps=None, time_limit=None):
         # assert time_limit is None, "LKH3 does not provide any time limitation parameter"
         self.reset(instance)
