@@ -32,7 +32,7 @@ class EcoleEnvironment(VRPEnvironment):
         super(EcoleEnvironment, self).reset(instance)
         self.scip_model = VRPModelSCIP(instance, lns_only=True)
         if initial is not None:
-            self.scip_model.setSolution(initial)
+            self.scip_model.set_solution(initial)
         return self.env.reset(ecole.scip.Model.from_pyscipopt(self.scip_model))
 
     @abstractmethod

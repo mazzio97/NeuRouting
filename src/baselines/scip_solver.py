@@ -1,13 +1,13 @@
 from matplotlib import pyplot as plt
 
+import generators
 from environments import VRPSolver
 from instances import VRPInstance, VRPSolution
 from instances.vrp_model_scip import VRPModelSCIP
-from utils.vrp_io import read_vrp
 
 
 class SCIPSolver(VRPSolver):
-    def __init__(self, lns_only=False):
+    def __init__(self, lns_only=True):
         super().__init__("scip")
         self.model = None
         self.lns_only = lns_only
@@ -30,8 +30,8 @@ class SCIPSolver(VRPSolver):
 
 
 if __name__ == "__main__":
-    inst = read_vrp("../../res/instances/A-n32-k5.vrp", grid_dim=100)
-    scipsolver = SCIPSolver(lns_only=False)
-    sol = scipsolver.solve(inst, time_limit=30)
+    inst = generators.generate_instance(n_customers=50)
+    scipsolver = SCIPSolver()
+    sol = scipsolver.solve(inst, time_limit=180)
     sol.plot()
     plt.show()
