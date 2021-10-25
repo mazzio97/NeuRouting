@@ -3,6 +3,7 @@ import re
 from multiprocessing import Pool
 from typing import List
 
+import matplotlib.pyplot as plt
 from pyscipopt import Model
 
 from instances.vrp_solution import VRPSolution
@@ -12,7 +13,7 @@ from nlns import RepairProcedure
 
 class SCIPRepair(RepairProcedure):
 
-    def __init__(self, time_limit: int = 1e20):
+    def __init__(self, time_limit: int = 10):
         self.time_limit = time_limit
 
     @staticmethod
@@ -22,10 +23,13 @@ class SCIPRepair(RepairProcedure):
                 for name, val in assignment.items() if val > 0.99]
 
     def multiple(self, partial_solutions: List[VRPSolution]):
-        with Pool(os.cpu_count()) as pool:
-            results = pool.map(self, partial_solutions)
-            pool.close()
-            pool.join()
+        if len(partial_solutions) == 1:
+            results = [self(partial_solutions[0])]
+        else:
+            with Pool(os.cpu_count()) as pool:
+                results = pool.map(self, partial_solutions)
+                pool.close()
+                pool.join()
         for sol, res in zip(partial_solutions, results):
             sol.routes = res.routes
 
