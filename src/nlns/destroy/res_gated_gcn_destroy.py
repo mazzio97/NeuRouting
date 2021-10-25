@@ -63,21 +63,19 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         if self.current_instances is None or instances != self.current_instances:
             self.current_instances = instances
             instances = list(instances)
-            n_instances = len(self.current_instances)
             batch_size = 64
             all_edges_preds = []
-            for batch_idx in range(0, n_instances, batch_size):
-                edges_preds, _ = self.model.forward(*self.features(instances[batch_idx:min(batch_idx + batch_size, n_instances)]))
+            for batch_idx in range(0, len(self.current_instances), batch_size):
+                edges_preds, _ = self.model.forward(*self.features(instances[batch_idx:min(batch_idx + batch_size, len(self.current_instances))]))
                 all_edges_preds.append(edges_preds)
             all_edges_preds = torch.cat(all_edges_preds, dim=0)
             prob_preds = torch.log_softmax(all_edges_preds, -1)[:, :, :, -1].to(self.device)
             self.edges_probs = np.exp(prob_preds.detach().cpu())
-            if n_instances == 1:
-                self.edges_probs = [self.edges_probs[0]] * len(solutions)
 
-        for sol, probs in zip(solutions, self.edges_probs):
+        for i, sol in enumerate(solutions):
             sol.verify()
             sol_edges = np.array(sol.as_edges())
+            probs = self.edges_probs[0] if len(self.current_instances) == 1 else self.edges_probs[i]
             sol_edges_probs = np.array([1 - probs[c1, c2] for c1, c2 in sol_edges])
             # self.plot_solution_heatmap(sol.instance, sol_edges, sol_edges_probs)
             # self.remove_nodes(sol, sol_edges, sol_edges_probs)

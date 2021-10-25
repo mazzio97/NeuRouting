@@ -15,10 +15,10 @@ from nlns.initial import nearest_neighbor_solution
 class BatchLNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
 
     def __init__(self, batch_size: int,
-                 operators: List[LNSOperator],
+                 operator: LNSOperator,
                  initial=nearest_neighbor_solution):
         VRPEnvironment.__init__(self, "batch_lns")
-        LargeNeighborhoodSearch.__init__(self, operators, initial, False)
+        LargeNeighborhoodSearch.__init__(self, [operator], initial, False)
         self.batch_size = batch_size
         self.instance = None
         self.solution = None
@@ -36,15 +36,13 @@ class BatchLNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
         backup_copies = [deepcopy(sol) for sol in self.solution]
         n_solutions = len(self.solution)
 
-        destroy_procedure, repair_procedure, idx = self.select_operator_pair()
-
         n_batches = ceil(float(n_solutions) / self.batch_size)
         for i in range(n_batches):
             with torch.no_grad():
                 begin = i * self.batch_size
                 end = min((i + 1) * self.batch_size, n_solutions)
-                destroy_procedure.multiple(self.solution[begin:end])
-                repair_procedure.multiple(self.solution[begin:end])
+                self.operators[0].destroy.multiple(self.solution[begin:end])
+                self.operators[0].destroy.multiple(self.solution[begin:end])
 
         for i in range(n_solutions):
             cost = self.solution[i].cost()

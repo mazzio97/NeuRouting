@@ -24,19 +24,25 @@ class LargeNeighborhoodSearch:
         self.n_operators = len(operators)
         self.adaptive = adaptive
         self.performances = np.array([np.inf] * self.n_operators) if adaptive else None
+        self.usages = np.zeros(self.n_operators, dtype=int) if adaptive else None
 
-    def select_operator_pair(self) -> Tuple[DestroyProcedure, RepairProcedure, int]:
+    def select_operator_pairs(self, size=1):
         if self.adaptive and self.n_operators > 1:
             if np.inf in self.performances:
                 indices = np.where(self.performances == np.inf)[0]
-                idx = np.random.choice(indices)
+                idxs = np.random.choice(indices, size=size)
             else:
                 perf = self.performances + abs(min(self.performances))
                 probs = perf / perf.sum()
-                idx = np.random.choice(range(self.n_operators), p=probs)
+                idxs = np.random.choice(range(self.n_operators), p=probs, size=size)
         else:
-            idx = np.random.randint(0, self.n_operators)
-        return self.operators[idx].destroy, self.operators[idx].repair, idx
+            idxs = np.random.randint(0, self.n_operators, size=size)
+
+        op_sols_dict = {op_idx: np.where(idxs == op_idx)[0] for op_idx in np.unique(idxs)}
+        if self.adaptive:
+            for op_idx, sols_idxs in op_sols_dict.items():
+                self.usages[op_idx] += len(sols_idxs)
+        return op_sols_dict
 
 
 class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
@@ -64,24 +70,29 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
     def step(self) -> dict:
         current_cost = self.solution.cost()
 
-        destroy_operator, repair_operator, idx = self.select_operator_pair()
+        op_sols_dict = self.select_operator_pairs(size=self.neighborhood_size)
 
         iter_start_time = time.time()
         with torch.no_grad():
-            destroy_operator.multiple(self.neighborhood)
-            repair_operator.multiple(self.neighborhood)
+            for op_idx, sols_idx in op_sols_dict.items():
+                self.operators[op_idx].destroy.multiple(self.neighborhood[sols_idx])
+                self.operators[op_idx].repair.multiple(self.neighborhood[sols_idx])
         lns_iter_duration = time.time() - iter_start_time
 
         self.neighborhood_costs = [sol.cost() for sol in self.neighborhood]
         best_idx = int(np.argmin(self.neighborhood_costs))
+        for op_idx, sols_idx in op_sols_dict.items():
+            if best_idx in sols_idx:
+                best_op_idx = op_idx
+                break
         new_cost = self.neighborhood_costs[best_idx]
 
         # If adaptive search is used, update performance scores
         if self.adaptive:
             delta = (current_cost - new_cost) / lns_iter_duration
-            if self.performances[idx] == np.inf:
-                self.performances[idx] = delta
-            self.performances[idx] = self.performances[idx] * (1 - EMA_ALPHA) + delta * EMA_ALPHA
+            if self.performances[best_op_idx] == np.inf:
+                self.performances[best_op_idx] = delta
+            self.performances[best_op_idx] = self.performances[best_op_idx] * (1 - EMA_ALPHA) + delta * EMA_ALPHA
 
         self.n_steps += 1
 
@@ -97,7 +108,7 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
         start_time = time.time()
         while self.n_steps < self.max_steps and time.time() - start_time < self.time_limit:
             # Create neighborhood_size copies of the same solution that can be repaired in parallel
-            self.neighborhood = [deepcopy(self.solution) for _ in range(self.neighborhood_size)]
+            self.neighborhood = np.array([deepcopy(self.solution) for _ in range(self.neighborhood_size)])
             criteria = self.step()
 
             if criteria["cost"] < self.incumbent_solution.cost():
@@ -119,6 +130,9 @@ class LNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
             self.history.append(deepcopy(self.incumbent_solution))
             record_gif(self.history,
                        file_name=f"{self.name.lower().replace(' ', '_')}_n{self.instance.n_customers}.gif")
+
+        if self.adaptive:
+            self.usages = self.usages.astype(np.float32) / self.usages.sum()
 
         return self.solution
 
