@@ -31,7 +31,7 @@ class Evaluator:
         self.solvers = solvers
         self.render = render
 
-    def compare(self, instances: List[VRPInstance], n_runs=1, max_steps=None, time_limit=None) -> Stats:
+    def compare(self, instances: List[VRPInstance], n_runs=1, max_steps=None, time_limit=None, inst_names=None) -> Stats:
         stats = Stats(self.solvers)
         for i, inst in enumerate(instances):
             for j, solver in enumerate(self.solvers):
@@ -58,5 +58,6 @@ class Evaluator:
                 for stat in keys:
                     inst_stats[stat] = inst_stats[stat] / n_runs
 
-                print(f"Instance {i} solved by {solver.name} with cost {inst_stats['cost']}")
+                instance_name = inst_names[i] if inst_names is not None else f"Instance_{i}"
+                print(f"{instance_name} solved by {solver.name} with cost {inst_stats['cost']}")
         return stats

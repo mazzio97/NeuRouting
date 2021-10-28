@@ -37,6 +37,7 @@ neural_models = {
 def nlns_builder(destroy_names: Dict[str, Union[float, List[float]]],
                  repair_names: List[str],
                  neighborhood_size: int,
+                 n=None,
                  initial=nearest_neighbor_solution,
                  simulated_annealing=False,
                  name="nlns",
@@ -50,7 +51,7 @@ def nlns_builder(destroy_names: Dict[str, Union[float, List[float]]],
         if type(destroy_p) is float:
             destroy_p = [destroy_p]
         for percentage in destroy_p:
-            lns_operators.append(get_lns_operator(destroy, repair, percentage, device, ckpt_path))
+            lns_operators.append(get_lns_operator(destroy, repair, percentage, n, device, ckpt_path))
 
     lns_env = SimAnnealingLNSEnvironment if simulated_annealing else LNSEnvironment
 
@@ -60,10 +61,11 @@ def nlns_builder(destroy_names: Dict[str, Union[float, List[float]]],
 def get_lns_operator(destroy_name: str,
                      repair_name: str,
                      destroy_percentage: float,
+                     n=None,
                      device="cpu",
                      ckpt_path="./pretrained/") -> LNSOperator:
     if destroy_name in neural_models.keys():
-        proc, model, ckpt = get_neural_procedure(destroy_name, repair_name, destroy_percentage, ckpt_path)
+        proc, model, ckpt = get_neural_procedure(destroy_name, repair_name, destroy_percentage, ckpt_path, n)
         destroy = proc(model, destroy_percentage, device=device)
         if ckpt is not None:
             print(f"Loading {ckpt} checkpoint...")
@@ -72,7 +74,7 @@ def get_lns_operator(destroy_name: str,
         destroy = destroy_procedures[destroy_name](destroy_percentage)
 
     if repair_name in neural_models.keys():
-        proc, model, ckpt = get_neural_procedure(repair_name, destroy_name, destroy_percentage, ckpt_path)
+        proc, model, ckpt = get_neural_procedure(repair_name, destroy_name, destroy_percentage, ckpt_path, n)
         repair = proc(model, device=device)
         if ckpt is not None:
             print(f"Loading {ckpt} checkpoint...")
@@ -82,7 +84,7 @@ def get_lns_operator(destroy_name: str,
     return LNSOperator(destroy, repair)
 
 
-def get_neural_procedure(neural_name: str, opposite_name: str, percentage: float, ckpt_path: str):
+def get_neural_procedure(neural_name: str, opposite_name: str, percentage: float, ckpt_path: str, n=None):
     assert neural_name in neural_models.keys(), \
         f"Unknown neural procedure {neural_name}, select one between {neural_models.keys()}."
 
@@ -94,9 +96,13 @@ def get_neural_procedure(neural_name: str, opposite_name: str, percentage: float
     ckpt_file = None
     for ckpt in model_ckpts:
         if "opposite_" + opposite_name in ckpt:
-            ckpt_file = ckpt
-            if f"{str(percentage)}." in ckpt:
-                break
+            if n is not None and str(n) in ckpt:
+                ckpt_file = ckpt
+                if f"{str(percentage)}." in ckpt:
+                    ckpt_file = ckpt
+                    break
+            elif ckpt_file is None:
+                ckpt_file = ckpt
     if ckpt_file is None and len(model_ckpts) > 0:
         ckpt_file = random.choice(model_ckpts)
     return neural_proc, neural_model, ckpt_file
