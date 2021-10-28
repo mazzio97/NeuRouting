@@ -1,6 +1,4 @@
 import re
-from builtins import staticmethod
-
 from pyscipopt import Model, quicksum
 
 from instances import VRPInstance, VRPSolution
@@ -21,7 +19,7 @@ class VRPModelSCIP(Model):
             for j in V:
                 if i != j:
                     x[i, j] = self.addVar(vtype="B", name=f"x({i}, {j})")
-        u = [self.addVar(vtype="I", name=f"u({i})") for i in N]
+        u = [self.addVar(vtype="C", name=f"u({i})", lb=1, ub=Q) for i in N]
 
         # Objective
         self.setObjective(quicksum(x[i, j] * c[i, j] for (i, j) in x), sense='minimize')
@@ -43,9 +41,6 @@ class VRPModelSCIP(Model):
 
         for i in N:
             self.addCons(u[i - 1] >= q[i - 1])
-
-        for i in N:
-            self.addCons(u[i - 1] <= Q)
 
         self.data = x
         self.varname2var = {v.name: v for v in self.getVars() if 'x' in v.name}

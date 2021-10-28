@@ -95,7 +95,7 @@ def get_neural_procedure(neural_name: str, opposite_name: str, percentage: float
     for ckpt in model_ckpts:
         if "opposite_" + opposite_name in ckpt:
             ckpt_file = ckpt
-            if str(percentage) in ckpt:
+            if f"{str(percentage)}." in ckpt:
                 break
     if ckpt_file is None and len(model_ckpts) > 0:
         ckpt_file = random.choice(model_ckpts)

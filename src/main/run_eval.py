@@ -17,9 +17,10 @@ parser.add_argument('-c', '--n_customers', type=int, required=True)
 parser.add_argument('-dm', '--destroy_methods', nargs='+')
 parser.add_argument('-dp', '--destroy_percentage', nargs='+')
 parser.add_argument('-rm', '--repair_methods', nargs='+')
+parser.add_argument('-r', '--runs', type=int, default=5)
 parser.add_argument('-t', '--time_limit', type=int, default=60)
 parser.add_argument('-max', '--max_steps', type=int, required=False)
-parser.add_argument('-ns', '--neighborhood_size', type=int, default=64)
+parser.add_argument('-ns', '--neighborhood_size', type=int, default=1)
 parser.add_argument('-sa', '--simulated_annealing', action='store_true', default=False)
 parser.add_argument('-a', '--adaptive', action='store_true', default=False)
 parser.add_argument('-b', '--baselines', nargs='+', required=False)
@@ -34,7 +35,7 @@ if __name__ == "__main__":
 
     ckpt_path = "./pretrained/"
 
-    eval_instances = generate_multiple_instances(n_instances=args.n_instances, n_customers=args.n_customers, seed=0)
+    eval_instances = generate_multiple_instances(n_instances=args.n_instances, n_customers=args.n_customers, seed=456)
 
     baselines = [SCIPSolver(), ORToolsSolver(), LKHSolver("./executables/LKH")]
     if args.baselines is not None:
@@ -61,7 +62,7 @@ if __name__ == "__main__":
         else:
             for destroy in args.destroy_methods:
                 for repair in args.repair_methods:
-                    name = 'destroy_' + destroy + "_repair_" + repair
+                    name = 'destroy_' + destroy + "_repair_" + repair + '_p' + '_'.join(args.destroy_percentage)
                     if args.simulated_annealing:
                         name += '_sa'
                     lns_env = nlns_builder(destroy_names={destroy: destroy_percentage},
@@ -75,6 +76,6 @@ if __name__ == "__main__":
 
     evaluator = Evaluator(solvers)
 
-    stats = evaluator.compare(eval_instances, max_steps=args.max_steps, time_limit=args.time_limit)
+    stats = evaluator.compare(eval_instances, n_runs=args.runs, max_steps=args.max_steps, time_limit=args.time_limit)
     for solver, df in stats.to_dataframe().items():
-        df.to_csv(f"./res/stats/{solver.name}_n{args.n_customers}.csv")
+        df.to_csv(f"./res/stats/n{args.n_customers}/{solver.name}_n{args.n_customers}.csv")

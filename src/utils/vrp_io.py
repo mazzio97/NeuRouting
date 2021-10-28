@@ -10,7 +10,7 @@ from instances import VRPInstance
 GRID_DIM = 100000
 
 
-def read_vrp(filepath: str, grid_dim: int = GRID_DIM) -> VRPInstance:
+def read_vrp(filepath, grid_dim: int = GRID_DIM) -> VRPInstance:
     with open(filepath, "r") as f:
         lines = [ll.strip() for ll in f]
         i = 0
