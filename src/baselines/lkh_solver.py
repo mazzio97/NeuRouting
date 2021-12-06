@@ -53,10 +53,3 @@ class LKHSolver(VRPSolver):
                     f.write("{}\n".format(k))
                 else:
                     f.write("{} = {}\n".format(k, v))
-
-
-if __name__ == "__main__":
-    inst = read_vrp("../../res/A-n32-k5.vrp", grid_dim=100)
-    lkh_solver = LKHSolver("../../executables/LKH")
-    lkh_solver.solve(inst)
-    lkh_solver.render()

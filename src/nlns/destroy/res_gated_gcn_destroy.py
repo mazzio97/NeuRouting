@@ -47,15 +47,19 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         sol.destroy_edges(sol_edges[to_remove_idx])
 
     def remove_nodes(self, sol, sol_edges, sol_edges_probs):
+        sol_edges_probs_norm = sol_edges_probs / sol_edges_probs.sum()
+        n_edges = len(sol_edges)
         n_nodes = sol.instance.n_customers + 1
-        sol_nodes_probs = np.zeros(n_nodes)
-        n_remove = int(n_nodes * self.percentage)
-        for (c1, c2), prob in zip(sol_edges, sol_edges_probs):
-            sol_nodes_probs[c1] += prob if c1 != 0 else 0
-            sol_nodes_probs[c2] += prob if c2 != 0 else 0
-        sol_nodes_probs_norm = sol_nodes_probs / sol_nodes_probs.sum()
-        to_remove_idx = np.random.choice(range(n_nodes), size=n_remove, p=sol_nodes_probs_norm, replace=False)
-        sol.destroy_nodes(to_remove_idx)
+        n_remove_nodes = int(n_nodes * self.percentage)
+        to_remove_edges = np.random.choice(range(n_edges), size=n_nodes, p=sol_edges_probs_norm, replace=False)
+        to_remove_idx = set()
+        for e in to_remove_edges:
+            for c in sol_edges[e]:
+                if len(to_remove_idx) == n_remove_nodes:
+                    break
+                if c != 0:
+                    to_remove_idx.add(c)
+        return sol.destroy_nodes(list(to_remove_idx))
 
     def multiple(self, solutions: List[VRPSolution]):
         instances = [sol.instance for sol in solutions]
@@ -77,7 +81,6 @@ class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
             sol_edges = np.array(sol.as_edges())
             probs = self.edges_probs[0] if len(self.current_instances) == 1 else self.edges_probs[i]
             sol_edges_probs = np.array([1 - probs[c1, c2] for c1, c2 in sol_edges])
-            # self.plot_solution_heatmap(sol.instance, sol_edges, sol_edges_probs)
             # self.remove_nodes(sol, sol_edges, sol_edges_probs)
             self.remove_edges(sol, sol_edges, sol_edges_probs)
 
