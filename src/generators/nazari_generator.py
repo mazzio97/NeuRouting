@@ -2,6 +2,22 @@ import numpy as np
 
 from instances import VRPInstance
 
+def generate_nazari_instance(n_customers: int) -> VRPInstance:
+    """
+    Generate data as defined by [1]. The capacity is computed as the linear
+    interpolation based on the values picked by [1].
+
+    Args:
+        n_customers (int): Number of customer that will be in the generated instance.
+
+    Returns:
+        VRPInstance: Final VRPInstance.
+    """
+    capacity = np.interp(n_customers, [10, 20, 50, 100], [20, 30, 40, 50])
+    return VRPInstance(list(np.random.uniform(size=(2,))), 
+                       list(np.random.uniform(size=(n_customers, 2))), 
+                       list(np.random.randint(1, 10, size=(n_customers,))),
+                       capacity)
 
 def generate_nazari_instances(n_instances: int, n_customers: int):
     acceptable = [10, 20, 50, 100]
