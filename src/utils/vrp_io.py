@@ -48,7 +48,7 @@ def write_vrp(instance: VRPInstance, filepath: str, grid_dim=GRID_DIM):
                 ("TYPE", "CVRP"),
                 ("DIMENSION", instance.n_customers + 1),
                 ("EDGE_WEIGHT_TYPE", "EUC_2D"),
-                ("CAPACITY", instance.capacity)
+                ("CAPACITY", int(instance.capacity))
             )
         ]))
         f.write("\n")
