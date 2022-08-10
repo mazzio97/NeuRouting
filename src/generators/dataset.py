@@ -1,33 +1,48 @@
-from typing import Union, List, Tuple
-from os import path as osp
-import pickle
-
+from typing import Union, List, Tuple, Iterable
 import torch
-from torch_geometric.data import Dataset, Data
+from torch_geometric.data import Data
 import numpy as np
 
 from generators.nazari_generator import generate_nazari_instance
 from instances import VRPInstance
 from baselines import LKHSolver
-from utils.vrp_io import write_vrp
 
-class VRPDataset(Dataset):
-    def __init__(self, 
-                 out: str,
-                 n_instances: int, 
-                 n_customer: Union[int, Tuple[int, int]], 
+class IterableVRPDataset(torch.utils.data.IterableDataset):
+    def __init__(self,
+                 n_instances: int,
+                 n_customer: Union[int, Tuple[int, int]],
+                 batch_size: int = 1,
                  num_neighbors: int = -1,
-                 transform = None, 
                  seed: int = 42,
                  lkh_path: str = "executables/LKH"):
+        """
+        Implementation of torch's Dataset which takes care of
+        the generation of random instances.
+        The number of nodes in an instance is kept constant between
+        batches to allow parallelizing the computation while keeping
+        diverse samples.
+
+        Args:
+            n_instances (int): Total number of instances to generate.
+            n_customer (Union[int, Tuple[int, int]]): Amount of customer
+                to generate. Either a constant value of a tuple representing
+                the range in which customers will be sampled.
+            batch_size (int, optional): Number of instances in one batch. Defaults to 1.
+            num_neighbors (int, optional): Number of neighbours that are connected to each node. 
+                Defaults to -1 which corresponds to a fully connected graph.
+            seed (int, optional): Random seed. Defaults to 42.
+            lkh_path (str, optional): Path to LKH3 solver. Defaults to "executables/LKH".
+        """
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
         self.lkh = LKHSolver(lkh_path)
-        self.out = out
-        self.n_instances = n_instances
+        self.instances = n_instances
         self.nodes = n_customer
         self.seed = seed
         self.num_neighbors = num_neighbors
-        super().__init__(out, transform, None, None)
-
+        self.batch_size = batch_size
+    
     def _sample_nodes(self) -> int:
         """
         Returns:
@@ -40,118 +55,57 @@ class VRPDataset(Dataset):
             low, high = self.nodes
             return np.random.randint(low, high)
 
-    @property
-    def raw_file_names(self) -> List[str]:
+    def generate_instance(self, nodes: int) -> VRPInstance:
         """
-        Returns:
-            List[str]: File names resulting from the generation process
-        """
-        return [f"{i}.vrp.instance" for i in range(self.n_instances)]
+        Args:
+            nodes (int): Number of customers in the generated instance.
 
-    @property
-    def processed_file_names(self) -> List[str]:
-        """
-        Returns:
-            List[str]: Filenames containing serialized VRPSolutions.
-        """
-        return [f"{i}.data.pickle" for i in range(self.n_instances)]
-
-    def generate_instance(self) -> VRPInstance:
-        """
         Returns:
             VRPInstance: Generated VRP Instance
         """
         raise NotImplementedError
 
-    def download(self):
+    def __iter__(self) -> Iterable[Data]:
         """
-        Download step is the data in which files are saved to self.out generation step.
+        Yields:
+            Iterator[Iterable[Data]]: Generated instance in torch geometric format.
         """
-        for idx in range(self.n_instances):
-            instance = self.generate_instance()
+        for _ in range(self.instances):
+            nodes = self._sample_nodes()
 
-            # compute solution using LKH
-            solution = self.lkh.solve(instance)
+            for _ in range(self.batch_size):
+                instance = self.generate_instance(nodes)
+                # compute solution using LKH
+                solution = self.lkh.solve(instance)
+                # nodes position
+                pos = torch.tensor(np.stack((np.array(instance.depot), *instance.customers)))
+                # node features are the node position along with two extra dimension
+                # one is used to signal the depot (1 for the depot, 0 for all the other)
+                # the other is 0 for the depot and demand / capacity for the other nodes
+                x = torch.cat((pos, torch.zeros((pos.shape[0], 1))), axis=1)
+                x[0, -1] = 1
+                x = torch.cat((x, torch.zeros((x.shape[0], 1))), axis=1)
+                x[1:, -1] = torch.tensor(instance.demands / instance.capacity)
+                # edge_index is the adjacency matrix in COO format
+                adj = torch.tensor(instance.adjacency_matrix(self.num_neighbors))
+                connected = torch.where(adj > 1)
+                # turn adjacency matrix in COO format
+                edge_index = torch.stack(connected)
+                # edge_attr is the feature of each edge: euclidean distance between 
+                # the nodes and the node attribute value according to
+                # Kool et al. (2022) Deep Policy Dynamic Programming for Vehicle Routing Problems
+                distance = torch.tensor(instance.distance_matrix[connected].reshape(-1, 1))
+                edge_type = adj[connected].reshape(-1, 1)
+                edge_attr = torch.hstack((distance, edge_type))
+                # y is the target we wish to predict to i.e. the solution provided by LKH
+                # added as a sparse array to save memory (adjacency matrix could end up being big but
+                # will mostly be sparse)
+                sol_adj = torch.tensor(solution.adjacency_matrix())
+                sol_connected = (sol_adj > 0).nonzero().t()
+                y = torch.sparse_coo_tensor(sol_connected, torch.ones(sol_connected.shape[1]), sol_adj.shape)
 
-            with open(osp.join(self.raw_dir, f"{idx}.vrp.instance"), "wb") as f:
-                pickle.dump(solution, f)
+                yield Data(x=x, edge_index=edge_index, edge_attr=edge_attr, pos=pos, y=y)
 
-    def process(self):
-        """
-        Process step converts VRPInstances into Data objects that will be 
-        used by torch-geometric.
-        """
-        for raw_path, processed_path in zip(self.raw_paths, self.processed_paths):
-            with open(raw_path, "rb") as f:
-                solution = pickle.load(f)
-            
-            instance = solution.instance
-
-            # nodes position
-            pos = np.stack((np.array(instance.depot), *instance.customers))
-
-            # node features are the node position along with two extra dimension
-            # one is used to signal the depot (1 for the depot, 0 for all the other)
-            # the other is 0 for the depot and demand / capacity for the other nodes
-            x = np.concatenate((pos, np.zeros((pos.shape[0], 1))), axis=1)
-            x[0, -1] = 1
-            x = np.concatenate((x, np.zeros((x.shape[0], 1))), axis=1)
-            x[1:, -1] = instance.demands / instance.capacity
-
-            # edge_index is the adjacency matrix in COO format
-            adj = instance.adjacency_matrix(self.num_neighbors)
-            connected = np.where(adj > 1)
-            # turn adjacency matrix in COO format
-            edge_index = np.stack(connected)
-
-            # edge_attr is the feature of each edge: euclidean distance between 
-            # the nodes and the node attribute value according to
-            # Kool et al. (2022) Deep Policy Dynamic Programming for Vehicle Routing Problems
-            distance = instance.distance_matrix[connected].reshape(-1, 1)
-            edge_type = adj[connected].reshape(-1, 1)
-            edge_attr = np.hstack((distance, edge_type))
-
-            # y is the target we wish to predict to i.e. the solution provided by LKH
-            y = np.stack(np.where(solution.adjacency_matrix() != 0))
-
-            data = Data(x=x, 
-                        edge_index=edge_index, 
-                        edge_attr=edge_attr, 
-                        pos=pos, 
-                        y=y,
-                        num_nodes=instance.n_customers + 1)
-            
-            with open(processed_path, "wb") as f:
-                pickle.dump(data, f)   
-
-    def len(self) -> int:
-        """
-        Returns:
-            int: Number of instances in the dataset
-        """
-        return self.n_instances
-
-    def get(self, idx: int) -> Data:
-        """
-        Return the item with the specified idx
-
-        Args:
-            idx (int): Index of the item to retrieve
-
-        Returns:
-            Data: Data item with the specified index
-        """
-        with open(osp.join(self.processed_dir, f"{idx}.data.pickle"), "rb") as f:
-            data = pickle.load(f)
-        return data
-
-class NazariDataset(VRPDataset):
-
-    def generate_instance(self) -> VRPInstance:
-        return generate_nazari_instance(self._sample_nodes())
-
-    # Process and download needs to be overridden like that
-    # because of the interal checks performed by the Dataset
-    # class
-    def process(self): super().process()
-    def download(self): super().download()
+class NazariDataset(IterableVRPDataset):
+    def generate_instance(self, nodes: int) -> VRPInstance:
+        return generate_nazari_instance(nodes)
