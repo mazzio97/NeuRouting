@@ -4,8 +4,58 @@ from torch_geometric.data import Data
 import numpy as np
 
 from generators.nazari_generator import generate_nazari_instance
-from instances import VRPInstance
+from instances import VRPInstance, VRPSolution
 from baselines import LKHSolver
+
+
+def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None) -> Data:
+    """
+    Convert a VRPInstance and optionally a VRPSolution to a torch geometric
+    data instance.
+
+    Args:
+        instance (VRPInstance): VRP instance to be converted.
+        solution (VRPSolution, optional): VRP solution to embed in the instance data. Defaults to None.
+
+    Returns:
+        Data: torch geometric data instance
+    """
+    # nodes position
+    pos = torch.tensor(np.stack((np.array(instance.depot), *instance.customers)),
+                        dtype=torch.float)
+    # node features are the node position along with two extra dimension
+    # one is used to signal the depot (1 for the depot, 0 for all the other)
+    # the other is 0 for the depot and demand / capacity for the other nodes
+    x = torch.cat((pos, torch.zeros((pos.shape[0], 1), dtype=torch.float)), axis=1)
+    x[0, -1] = 1
+    x = torch.cat((x, torch.zeros((x.shape[0], 1), dtype=torch.float)), axis=1)
+    x[1:, -1] = torch.tensor(instance.demands / instance.capacity, dtype=torch.float)
+    # edge_index is the adjacency matrix in COO format
+    adj = torch.tensor(instance.adjacency_matrix(self.num_neighbors), dtype=torch.float)
+    connected = torch.where(adj > 1)
+    # turn adjacency matrix in COO format
+    edge_index = torch.stack(connected)
+    # edge_attr is the feature of each edge: euclidean distance between 
+    # the nodes and the node attribute value according to
+    # Kool et al. (2022) Deep Policy Dynamic Programming for Vehicle Routing Problems
+    distance = torch.tensor(instance.distance_matrix[connected].reshape(-1, 1),
+                            dtype=torch.float)
+    edge_type = adj[connected].reshape(-1, 1)
+    edge_attr = torch.hstack((distance, edge_type))
+    
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, pos=pos, y=y)
+    if solution is not None:
+        # y is the target we wish to predict to i.e. the solution provided by LKH
+        # added as a sparse array to save memory (adjacency matrix could end up being big but
+        # will mostly be sparse)
+        sol_adj = torch.tensor(solution.adjacency_matrix(),
+                                dtype=torch.float)
+        sol_connected = (sol_adj > 0).nonzero().t()
+        data.y = torch.sparse_coo_tensor(
+            sol_connected, torch.ones(sol_connected.shape[1]), sol_adj.shape, dtype=torch.float)
+
+    return data
+
 
 class IterableVRPDataset(torch.utils.data.IterableDataset):
     def __init__(self,
@@ -75,36 +125,8 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
 
             for _ in range(self.batch_size):
                 instance = self.generate_instance(nodes)
-                # compute solution using LKH
                 solution = self.lkh.solve(instance)
-                # nodes position
-                pos = torch.tensor(np.stack((np.array(instance.depot), *instance.customers)))
-                # node features are the node position along with two extra dimension
-                # one is used to signal the depot (1 for the depot, 0 for all the other)
-                # the other is 0 for the depot and demand / capacity for the other nodes
-                x = torch.cat((pos, torch.zeros((pos.shape[0], 1))), axis=1)
-                x[0, -1] = 1
-                x = torch.cat((x, torch.zeros((x.shape[0], 1))), axis=1)
-                x[1:, -1] = torch.tensor(instance.demands / instance.capacity)
-                # edge_index is the adjacency matrix in COO format
-                adj = torch.tensor(instance.adjacency_matrix(self.num_neighbors))
-                connected = torch.where(adj > 1)
-                # turn adjacency matrix in COO format
-                edge_index = torch.stack(connected)
-                # edge_attr is the feature of each edge: euclidean distance between 
-                # the nodes and the node attribute value according to
-                # Kool et al. (2022) Deep Policy Dynamic Programming for Vehicle Routing Problems
-                distance = torch.tensor(instance.distance_matrix[connected].reshape(-1, 1))
-                edge_type = adj[connected].reshape(-1, 1)
-                edge_attr = torch.hstack((distance, edge_type))
-                # y is the target we wish to predict to i.e. the solution provided by LKH
-                # added as a sparse array to save memory (adjacency matrix could end up being big but
-                # will mostly be sparse)
-                sol_adj = torch.tensor(solution.adjacency_matrix())
-                sol_connected = (sol_adj > 0).nonzero().t()
-                y = torch.sparse_coo_tensor(sol_connected, torch.ones(sol_connected.shape[1]), sol_adj.shape)
-
-                yield Data(x=x, edge_index=edge_index, edge_attr=edge_attr, pos=pos, y=y)
+                yield instance_to_PyG(instance, solution)
 
 class NazariDataset(IterableVRPDataset):
     def generate_instance(self, nodes: int) -> VRPInstance:
