@@ -8,7 +8,7 @@ from instances import VRPInstance, VRPSolution
 from baselines import LKHSolver
 
 
-def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None) -> Data:
+def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None, num_neighbors: int = 20) -> Data:
     """
     Convert a VRPInstance and optionally a VRPSolution to a torch geometric
     data instance.
@@ -16,6 +16,7 @@ def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None) -> Data
     Args:
         instance (VRPInstance): VRP instance to be converted.
         solution (VRPSolution, optional): VRP solution to embed in the instance data. Defaults to None.
+        num_neighbors (int, optional): Number of neighbours edges embedded for each node. Defaults to 20.
 
     Returns:
         Data: torch geometric data instance
@@ -31,7 +32,7 @@ def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None) -> Data
     x = torch.cat((x, torch.zeros((x.shape[0], 1), dtype=torch.float)), axis=1)
     x[1:, -1] = torch.tensor(instance.demands / instance.capacity, dtype=torch.float)
     # edge_index is the adjacency matrix in COO format
-    adj = torch.tensor(instance.adjacency_matrix(self.num_neighbors), dtype=torch.float)
+    adj = torch.tensor(instance.adjacency_matrix(num_neighbors), dtype=torch.float)
     connected = torch.where(adj > 1)
     # turn adjacency matrix in COO format
     edge_index = torch.stack(connected)
@@ -43,7 +44,7 @@ def instance_to_PyG(instance: VRPInstance, solution: VRPSolution = None) -> Data
     edge_type = adj[connected].reshape(-1, 1)
     edge_attr = torch.hstack((distance, edge_type))
     
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, pos=pos, y=y)
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, pos=pos)
     if solution is not None:
         # y is the target we wish to predict to i.e. the solution provided by LKH
         # added as a sparse array to save memory (adjacency matrix could end up being big but
@@ -126,7 +127,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
             for _ in range(self.batch_size):
                 instance = self.generate_instance(nodes)
                 solution = self.lkh.solve(instance)
-                yield instance_to_PyG(instance, solution)
+                yield instance_to_PyG(instance, solution, num_neighbors=self.num_neighbors)
 
 class NazariDataset(IterableVRPDataset):
     def generate_instance(self, nodes: int) -> VRPInstance:

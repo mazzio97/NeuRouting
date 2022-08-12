@@ -31,3 +31,4 @@ class GreedyRepair(RepairProcedure):
                     cust_route.append_route(neigh_route, self_head, neigh_head)
                     solution.routes.remove(neigh_route)
                     break
+        return solution

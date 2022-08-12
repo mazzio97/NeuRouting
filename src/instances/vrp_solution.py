@@ -120,6 +120,7 @@ class VRPSolution:
             f"Customers {missing} are not present in any tour."
         return True
 
+    @property
     def cost(self) -> float:
         return np.sum([self.instance.distance_matrix[from_id, to_id] for from_id, to_id in self.as_edges()])
 
