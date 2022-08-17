@@ -61,7 +61,7 @@ class BaseLargeNeighborhoodSearch(ABC):
         return (deepcopy(solution) for _ in range(size))
 
     @abstractmethod
-    def destroy(self, instance: VRPSolution, perc: float) -> VRPSolution:
+    def destroy(self, instance: VRPSolution) -> VRPSolution:
         """
         Destroy the specified solution by the specified amount.
 
@@ -125,8 +125,7 @@ class BaseLargeNeighborhoodSearch(ABC):
     def search(self, 
                  instance: VRPInstance, 
                  neighborhood_size: int = 100,
-                 max_time: float = 300,
-                 destroy_perc: float = 0.2) -> VRPSolution:
+                 max_time: float = 300) -> VRPSolution:
         """
         Search for a solution using LNS search.
 
@@ -152,8 +151,8 @@ class BaseLargeNeighborhoodSearch(ABC):
             N = self.neighborhood(current_best, neighborhood_size)
 
             iteration_start = time()
-            N = map(lambda sol: self.destroy(sol, destroy_perc), N)
-            N = map(lambda sol: self.repair(sol), N)
+            N = map(self.destroy, N)
+            N = map(self.repair, N)
             self._iteration_durations.append(time() - iteration_start)
 
             # retrieve best solution in neighborhood
@@ -163,9 +162,9 @@ class BaseLargeNeighborhoodSearch(ABC):
             if self.is_better(N_best, current_best):
                 current_best = N_best
 
-                if N_best.cost < current_best.cost:
+                if current_best.cost < overall_best.cost:
                     self.better_solution_found(overall_best, N_best)
-                    overall_best = N_best
+                    overall_best = current_best
                     self._history.append(overall_best)
 
 
@@ -200,9 +199,9 @@ class MultiOperatorLNS(BaseLargeNeighborhoodSearch):
         self.destroy_procedures = destroy_procedures
         self.repair_procedures = repair_procedures
 
-    def destroy(self, instance: VRPSolution, destroy_perc: float) -> VRPSolution:
+    def destroy(self, instance: VRPSolution) -> VRPSolution:
         destroy = random.choice(self.destroy_procedures)
-        return destroy(instance, destroy_perc)
+        return destroy(instance)
 
     def repair(self, instance: VRPSolution) -> VRPSolution:
         repair = random.choice(self.repair_procedures)
@@ -264,10 +263,10 @@ class AdaptiveLNS(MultiOperatorLNS):
         
         return procedures[idx]
 
-    def destroy(self, instance: VRPSolution, destroy_perc: float) -> VRPSolution:
+    def destroy(self, instance: VRPSolution) -> VRPSolution:
         destroy = self._performance_select(self.destroy_procedures, self._destroy_performance)
         self._last_destroy = destroy
-        return destroy(instance, destroy_perc)
+        return destroy(instance)
 
     def repair(self, instance: VRPSolution) -> VRPSolution:
         repair = self._performance_select(self.repair_procedures, self._repair_performance)
