@@ -14,6 +14,16 @@ class LNSProcedure(ABC):
 
 
 class DestroyProcedure(LNSProcedure):
+    def __init__(self, percentage: float):
+        """
+        Initialize the destroy procedure with the specified dedtroy percentage.
+
+        Args:
+            percentage (float): Destroy percentage.
+        """
+        assert 0 <= percentage <= 1
+        self.percentage = percentage
+
     @abstractmethod
     def __call__(self, solution: VRPSolution):
         pass

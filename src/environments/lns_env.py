@@ -46,7 +46,7 @@ class BaseLargeNeighborhoodSearch(ABC):
         """
         return nearest_neighbor_solution(instance)
 
-    def neighborhood(self, solution: VRPSolution, size: int) -> Iterable[VRPSolution]:
+    def neighborhood(self, solution: VRPSolution, size: int) -> List[VRPSolution]:
         """
         Generate a neighborhood of the current solution.
         Defaults to a list of copies of the current solution.
@@ -56,34 +56,28 @@ class BaseLargeNeighborhoodSearch(ABC):
             size (int): Size of the neighborhood.
 
         Returns:
-            Iterable[VRPSolution]: Solution neighborhood.
+            List[VRPSolution]: Solution neighborhood.
         """
-        return (deepcopy(solution) for _ in range(size))
+        return [deepcopy(solution) for _ in range(size)]
 
     @abstractmethod
-    def destroy(self, instance: VRPSolution) -> VRPSolution:
+    def destroy(self, instances: List[VRPSolution]):
         """
-        Destroy the specified solution by the specified amount.
+        Destroy the specified solutions by the specified amount in place.
 
         Args:
-            instance (VRPSolution): Instance that will be destroyed.
+            instances (List[VRPSolution]): Instances that will be destroyed.
             perc (float): Percentage to destroy the solution.
-
-        Returns:
-            VRPSolution: Partially destroyed solution.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def repair(self, instance: VRPInstance) -> VRPInstance:
+    def repair(self, instances: List[VRPSolution]):
         """
-        Repair the provided instance.
+        Repair the provided instances in place.
 
         Args:
-            instance (VRPSolution): Instance to be destroyed.
-
-        Returns:
-            VRPSolution: Solution generated from repairing the provided instance.
+            instances (List[VRPSolution]): Instances to be repaired.
         """
         raise NotImplementedError
 
@@ -151,8 +145,8 @@ class BaseLargeNeighborhoodSearch(ABC):
             N = self.neighborhood(current_best, neighborhood_size)
 
             iteration_start = time()
-            N = map(self.destroy, N)
-            N = map(self.repair, N)
+            self.destroy(N)
+            self.repair(N)
             self._iteration_durations.append(time() - iteration_start)
 
             # retrieve best solution in neighborhood
@@ -199,13 +193,13 @@ class MultiOperatorLNS(BaseLargeNeighborhoodSearch):
         self.destroy_procedures = destroy_procedures
         self.repair_procedures = repair_procedures
 
-    def destroy(self, instance: VRPSolution) -> VRPSolution:
+    def destroy(self, instances: List[VRPSolution]):
         destroy = random.choice(self.destroy_procedures)
-        return destroy(instance)
+        destroy.multiple(instances)
 
-    def repair(self, instance: VRPSolution) -> VRPSolution:
+    def repair(self, instances: List[VRPSolution]):
         repair = random.choice(self.repair_procedures)
-        return repair(instance)
+        repair.multiple(instances)
 
 class AdaptiveLNS(MultiOperatorLNS):
     """
@@ -263,15 +257,15 @@ class AdaptiveLNS(MultiOperatorLNS):
         
         return procedures[idx]
 
-    def destroy(self, instance: VRPSolution) -> VRPSolution:
+    def destroy(self, instances: List[VRPSolution]):
         destroy = self._performance_select(self.destroy_procedures, self._destroy_performance)
         self._last_destroy = destroy
-        return destroy(instance)
+        destroy.multiple(instances)
 
-    def repair(self, instance: VRPSolution) -> VRPSolution:
+    def repair(self, instances: List[VRPSolution]):
         repair = self._performance_select(self.repair_procedures, self._repair_performance)
         self._last_repair = repair
-        return repair(instance)
+        repair.multiple(instances)
 
     def new_solution_found(self, old_solution: VRPSolution, new_solution: VRPSolution):
         """
