@@ -39,7 +39,6 @@ class LKHSolver(VRPSolver):
             tours = read_solution(output_filename, self.instance.n_customers)
             tours = [Route(t, self.instance) for t in tours]
             self.solution = VRPSolution(self.instance, tours)
-            shutil.rmtree(tempdir)
         return self.solution
 
     @staticmethod
