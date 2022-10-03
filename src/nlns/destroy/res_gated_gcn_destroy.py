@@ -66,7 +66,7 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         """
         # get probability of edges in the solution
         solution_edges = np.array(solution.as_edges())
-        solution_edges_prob = prob.to_dense()[solution_edges.T].detach().numpy()
+        solution_edges_prob = prob.to_dense()[solution_edges.T].detach().cpu().numpy()
         # probabilities are computed as 1 - p with p the probability of an edge
         # being in the solution
         # we can thus sample the edges that are unlikely to be in the final solution
@@ -95,7 +95,7 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
             # TODO: Check for unbatching
 
         # remove edges
-        solution.destroy_edges(self._edges_to_remove(solution, prob))
+        solution.destroy_edges(self._edges_to_remove(solution, prob.cpu()))
 
     def _batch_instances(self, solutions: List[VRPSolution]) -> Batch:
         """
