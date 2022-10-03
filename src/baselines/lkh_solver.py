@@ -18,7 +18,7 @@ class LKHSolver(VRPSolver):
     def initial_solution(self, instance: VRPInstance):
         return self.solve(instance, max_steps=1)
 
-    def solve(self, instance: VRPInstance, max_steps=None, time_limit=None):
+    def solve(self, instance: VRPInstance, max_steps=None, runs=None, time_limit=None):
         # assert time_limit is None, "LKH3 does not provide any time limitation parameter"
         self.reset(instance)
         if max_steps is None:
@@ -31,7 +31,8 @@ class LKHSolver(VRPSolver):
             write_vrp(self.instance, problem_filename)
             params = {"PROBLEM_FILE": problem_filename,
                       "OUTPUT_TOUR_FILE": output_filename,
-                      "MAX_TRIALS": max_steps}
+                      "MAX_TRIALS": max_steps,
+                      "RUNS": runs}
             self.write_lkh_par(param_filename, params)
             check_output([self.executable, param_filename])
             tours = read_solution(output_filename, self.instance.n_customers)
@@ -43,7 +44,7 @@ class LKHSolver(VRPSolver):
     def write_lkh_par(filename, parameters):
         default_parameters = {  # Use none to include as flag instead of kv
             "SPECIAL": None,
-            "RUNS": 10,
+            "RUNS": 1,
             "TRACE_LEVEL": 1,
             "SEED": 0
         }

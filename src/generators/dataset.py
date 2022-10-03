@@ -69,7 +69,8 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
                  format: str = "vrp",
                  seed: int = 42,
                  lkh_path: str = "executables/LKH",
-                 lkh_pass: int = None):
+                 lkh_pass: int = None,
+                 lkh_runs: int = None):
         """
         Implementation of torch's Dataset which takes care of
         the generation of random instances.
@@ -92,12 +93,14 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
             lkh_pass (int, optional): Number of passes over LKH3 solver. 
                 Defaults to None which corresponds to the number of customers.
                 The less the passes the better the solution.
+            lkh_runs (int, optional): Number of runs over LKH3 solver. 
         """
         torch.manual_seed(seed)
         np.random.seed(seed)
 
         self.lkh = LKHSolver(lkh_path)
         self.lkh_pass = lkh_pass
+        self.lkh_runs = lkh_runs
         self.instances = n_instances
         self.nodes = n_customer
         self.seed = seed
@@ -137,7 +140,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
 
             for _ in range(self.batch_size):
                 instance = self.generate_instance(nodes)
-                solution = self.lkh.solve(instance, max_steps=self.lkh_pass)
+                solution = self.lkh.solve(instance, max_steps=self.lkh_pass, runs=self.lkh_runs)
 
                 if self.format == "pyg":
                     yield instance_to_PyG(instance, solution, num_neighbors=self.num_neighbors)
