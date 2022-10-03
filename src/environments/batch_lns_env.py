@@ -6,19 +6,17 @@ from typing import List
 import torch
 
 from environments import VRPEnvironment
-from environments.lns_env import LargeNeighborhoodSearch
 from instances import VRPInstance, VRPSolution, VRPNeuralSolution
 from nlns import LNSOperator
 from nlns.initial import nearest_neighbor_solution
 
 
-class BatchLNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
+class BatchLNSEnvironment(VRPEnvironment):
 
     def __init__(self, batch_size: int,
                  operator: LNSOperator,
                  initial=nearest_neighbor_solution):
         VRPEnvironment.__init__(self, "batch_lns")
-        LargeNeighborhoodSearch.__init__(self, [operator], initial, False)
         self.batch_size = batch_size
         self.instance = None
         self.solution = None

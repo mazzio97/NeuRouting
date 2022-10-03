@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch_geometric.nn as gnn
 from torch_geometric.data import Batch
+from torch_geometric.utils import unbatch, to_dense_adj
 
 
 class TSPGCNLayer(gnn.MessagePassing):
@@ -163,6 +164,7 @@ class ResidualGatedGCNModel(nn.Module):
         for mlp_l in self.mlp_layers:
             pred = mlp_l(edge_features)
         pred = self.classification(edge_features).reshape(-1)
+        pred_adj = to_dense_adj(data.edge_index, data.batch, pred)
 
         # turn data.y into dense matrix and extract entries from edge_index
         # to compute loss
@@ -173,4 +175,4 @@ class ResidualGatedGCNModel(nn.Module):
         y = y_adj[data.edge_index[0], data.edge_index[1]].reshape(-1)
         
         loss = nn.functional.binary_cross_entropy(pred, y)
-        return pred, loss
+        return pred_adj, loss

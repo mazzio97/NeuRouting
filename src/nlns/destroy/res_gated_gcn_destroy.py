@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Union, Tuple, Dict
+from utils.logging import Logger
 
 import numpy as np
 import torch
@@ -8,6 +9,10 @@ import torch.nn.functional as F
 from sklearn.utils import compute_class_weight
 from torch import optim
 from torch.autograd import Variable
+from torch_geometric import nn as gnn
+from torch_geometric.data import Data, Batch
+
+from generators.dataset import instance_to_PyG
 
 from baselines import LKHSolver
 from instances import VRPSolution
@@ -16,145 +21,152 @@ from nlns.neural import NeuralProcedure
 from models import ResidualGatedGCNModel
 from utils.visualize import plot_heatmap
 
+class HeatmapModel:
+    def __init__(self, 
+                 device: str, 
+                 hidden_dim: int = 300, 
+                 gcn_layers: int = 30, 
+                 mlp_layers: int = 3):
+        self.device = device
+        self.model = ResidualGatedGCNModel(hidden_dim=hidden_dim,
+                                           mlp_layers=mlp_layers,
+                                           gcn_layers=gcn_layers)
+        self.model.to(device)
 
-class ResidualGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
+    def __call__(self, data: Data):
+        data = data.to(self.device)
+        pred, _ = self.model(data)
+        return torch.sparse_coo_tensor(data.edge_index, pred)
 
-    def __init__(self, model: ResidualGatedGCNModel, percentage, num_neighbors=-1, device="cpu", logger=None):
-        super(ResidualGatedGCNDestroy, self).__init__(nn.DataParallel(model), device, logger)
+class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
+
+    def __init__(self, 
+                 percentage: float, 
+                 num_neighbors: int = 20,
+                 model_config: dict = {"device": "cpu"}):
+        super().__init__(percentage)
+
+        self.device = model_config.pop("device", "cpu")
+        self._heatmap_model = ResidualGatedGCNModel(**model_config)
+        self._heatmap_model.to(self.device)
+
         self.num_neighbors = num_neighbors
-        self.current_instances = None
-        self.edges_probs = None
-        self.percentage = percentage
 
-    @staticmethod
-    def plot_solution_heatmap(instance, sol_edges, sol_edges_probs):
-        n_nodes = instance.n_customers + 1
-        heatmap = np.zeros((n_nodes, n_nodes))
-        pos_heatmap = np.zeros((n_nodes, n_nodes))
-        for (c1, c2), prob in zip(sol_edges, sol_edges_probs):
-            heatmap[c1, c2] = prob
-            heatmap[c2, c1] = prob
-            pos_heatmap[c1, c2] = 1 - prob
-            pos_heatmap[c2, c1] = 1 - prob
-        plot_heatmap(plt.gca(), instance, pos_heatmap, title="Heatmap")
-        plt.show()
+    def _edges_to_remove(self, solution: VRPSolution, prob: torch.Tensor) -> List:
+        """
+        Randomly sample the edges to remove from a solution given the estimated
+        probability of a node ending up in the final solution.
 
-    def remove_edges(self, sol, sol_edges, sol_edges_probs):
-        sol_edges_probs_norm = sol_edges_probs / sol_edges_probs.sum()
-        n_edges = len(sol_edges)
+        Args:
+            solution (VRPSolution): Proposed solution
+            prob (torch.Tensor): Estimated probability
+
+        Returns:
+            List[int]: List of edges that to remove from the proposed solution
+        """
+        # get probability of edges in the solution
+        solution_edges = np.array(solution.as_edges())
+        solution_edges_prob = prob.to_dense()[solution_edges.T].detach().numpy()
+        # probabilities are computed as 1 - p with p the probability of an edge
+        # being in the solution
+        # we can thus sample the edges that are unlikely to be in the final solution
+        # and prune them
+        solution_edges_prob = 1 - solution_edges_prob
+        prob_norm = solution_edges_prob / solution_edges_prob.sum() # normalization
+        
+        # randomly sample edges to remove
+        n_edges = solution_edges.shape[0]
         n_remove = int(n_edges * self.percentage)
-        to_remove_idx = np.random.choice(range(n_edges), size=n_remove, p=sol_edges_probs_norm, replace=False)
-        sol.destroy_edges(sol_edges[to_remove_idx])
+        to_remove_idx = np.random.choice(range(n_edges), size=n_remove, p=prob_norm, replace=False)
 
-    def remove_nodes(self, sol, sol_edges, sol_edges_probs):
-        sol_edges_probs_norm = sol_edges_probs / sol_edges_probs.sum()
-        n_edges = len(sol_edges)
-        n_nodes = sol.instance.n_customers + 1
-        n_remove_nodes = int(n_nodes * self.percentage)
-        to_remove_edges = np.random.choice(range(n_edges), size=n_nodes, p=sol_edges_probs_norm, replace=False)
-        to_remove_idx = set()
-        for e in to_remove_edges:
-            for c in sol_edges[e]:
-                if len(to_remove_idx) == n_remove_nodes:
-                    break
-                if c != 0:
-                    to_remove_idx.add(c)
-        return sol.destroy_nodes(list(to_remove_idx))
+        return solution_edges[to_remove_idx]
+        
+    def __call__(self, solution: VRPSolution):
+        """
+        Destroy a solution by removing those edges that are less likely
+        to end up in the final solution according to the generated heatmap.
+
+        Args:
+            solution (VRPSolution): Current solution to be destroyed.
+        """
+        pyg = instance_to_PyG(solution.instance, solution, self.num_neighbors).to(self.device)
+        with torch.no_grad():
+            prob = self._heatmap_model(pyg)
+            # TODO: Check for unbatching
+
+        # remove edges
+        solution.destroy_edges(self._edges_to_remove(solution, prob))
+
+    def _batch_instances(self, solutions: List[VRPSolution]) -> Batch:
+        """
+        Turn list of solutions into batched data.
+
+        Args:
+            solutions (List[VRPSolution]): Solutions that will be batched together
+
+        Returns:
+            Batch: Batched solutions.
+        """
+        batch = Batch.from_data_list([
+            instance_to_PyG(s.instance, s, self.num_neighbors) for s in solutions
+        ]).to(self.device)
+        return batch
 
     def multiple(self, solutions: List[VRPSolution]):
-        instances = [sol.instance for sol in solutions]
-        instances = set(instances)
-        if self.current_instances is None or instances != self.current_instances:
-            self.current_instances = instances
-            instances = list(instances)
-            batch_size = 64
-            all_edges_preds = []
-            for batch_idx in range(0, len(self.current_instances), batch_size):
-                edges_preds, _ = self.model.forward(*self.features(instances[batch_idx:min(batch_idx + batch_size, len(self.current_instances))]))
-                all_edges_preds.append(edges_preds)
-            all_edges_preds = torch.cat(all_edges_preds, dim=0)
-            prob_preds = torch.log_softmax(all_edges_preds, -1)[:, :, :, -1].to(self.device)
-            self.edges_probs = np.exp(prob_preds.detach().cpu())
+        """
+        Destroy multiple solutions.
 
-        for i, sol in enumerate(solutions):
-            sol.verify()
-            sol_edges = np.array(sol.as_edges())
-            probs = self.edges_probs[0] if len(self.current_instances) == 1 else self.edges_probs[i]
-            sol_edges_probs = np.array([1 - probs[c1, c2] for c1, c2 in sol_edges])
-            # self.remove_nodes(sol, sol_edges, sol_edges_probs)
-            self.remove_edges(sol, sol_edges, sol_edges_probs)
+        Args:
+            solutions (List[VRPSolution]): Solutions that will be destroyed.
+        """
+        batch = self._batch_instances(solutions)
+        with torch.no_grad():
+            probs, _ = self._heatmap_model(batch)
 
-    def __call__(self, solution: VRPSolution):
-        self.multiple([solution])
+        for idx, s in enumerate(solutions):
+            s.destroy_edges(self._edges_to_remove(s, probs[idx]))
 
-    def load_model(self, ckpt_path: str):
-        ckpt = torch.load(ckpt_path, map_location=self.device)
-        self.model.load_state_dict(ckpt["model_state_dict"])
-        self.model.eval()
+    def state_dict(self) -> Dict:
+        return {
+            "model_state_dict": self._heatmap_model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "num_neighbors": self.num_neighbors,
+            "percentage": self.percentage
+        }
+    
+    @classmethod
+    def load(cls, path: str, device: str = "cpu"):
+        state_dict = torch.load(path, map_location=device)
+        res = cls(state_dict["percentage"], 
+                  num_neighbors=state_dict["num_neighbors"],
+                  model_config={"device": device})
+        res._heatmap_model.load_state_dict(state_dict["model_state_dict"])
+        res._init_train()
+        res.optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+        return res
 
     def _init_train(self):
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
-        self.lkh = LKHSolver("./executables/LKH")
-        self.n_samples = 0
-        self.running_loss = 0.0
-        self.running_preds_mean_cost = 0.0
-        self.running_lkh_mean_cost = 0.0
+        self.optimizer = optim.Adam(self._heatmap_model.parameters(), lr=1e-3)
+        self._heatmap_model.train()
 
-    def _train_step(self, opposite_procedure, train_batch):
-        train_batch = [sol.instance for sol in train_batch]
-        batch_size = len(train_batch)
-        batch_edges_target = []
-        lkh_costs = []
-        for instance in train_batch:
-            sol = self.lkh.solve(instance)
-            batch_edges_target.append(sol.adjacency_matrix())
-            lkh_costs.append(sol.cost())
-        edges_target = np.stack(batch_edges_target, axis=0)
-        edges_target = Variable(torch.LongTensor(edges_target), requires_grad=False)
-        edges_target = edges_target.to(self.device)
-        edges, edges_values, nodes, nodes_values = self.features(train_batch)
-        edge_labels = edges_target.cpu().numpy().flatten()
-        edge_cw = compute_class_weight("balanced", classes=np.unique(edge_labels), y=edge_labels)
-        edge_cw = torch.FloatTensor(edge_cw).to(self.device)
-        edges_preds, loss = self.model.forward(edges, edges_values, nodes, nodes_values, edges_target, edge_cw)
+    def _train_step(self, data: List[VRPSolution]) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+        assert hasattr(self, "optimizer"), "You need to call _init_train before calling _train_step."
+        batch = self._batch_instances(data)
+        probs, loss = self._heatmap_model(batch)
+
+        for idx, s in enumerate(data):
+            s.destroy_edges(self._edges_to_remove(s, probs[idx]))
+        
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
+        
+        return data, loss, dict()
 
-        preds_mean_cost = self._mean_tour_len_edges(edges_values, edges_preds)
-        lkh_mean_cost = np.mean(lkh_costs)
-        self.n_samples += batch_size
-        self.running_loss += batch_size * loss.data.item()
-        self.running_preds_mean_cost += batch_size * preds_mean_cost
-        self.running_lkh_mean_cost += batch_size * lkh_mean_cost
-
-    def _train_info(self, epoch, batch_idx, log_interval) -> dict:
-        return {"epoch": epoch + 1,
-                "batch_idx": batch_idx + 1,
-                "loss": self.running_loss / self.n_samples,
-                "preds_mean_cost": self.running_preds_mean_cost / self.n_samples,
-                "lkh_mean_cost": self.running_lkh_mean_cost / self.n_samples}
-
-    def _ckpt_info(self, epoch, batch_idx) -> dict:
-        return {"epoch": epoch + 1,
-                "batch_idx": batch_idx + 1,
-                "model_state_dict": self.model.state_dict(),
-                "optim": self.optimizer.state_dict()}
-
-    def features(self, instances):
-        edges = np.stack([inst.adjacency_matrix(self.num_neighbors) for inst in instances])
-        edges = Variable(torch.LongTensor(edges), requires_grad=False)
-        edges_values = np.stack([inst.distance_matrix for inst in instances])
-        edges_values = Variable(torch.FloatTensor(edges_values), requires_grad=False)
-        nodes = np.zeros(instances[0].n_customers + 1, dtype=int)
-        nodes[0] = 1
-        nodes = Variable(torch.LongTensor(np.stack([nodes for _ in instances])), requires_grad=False)
-        nodes_coord = np.stack([np.array([inst.depot] + inst.customers) for inst in instances])
-        nodes_demands = np.stack([np.array(inst.demands, dtype=float) / inst.capacity for inst in instances])
-        nodes_values = np.concatenate((nodes_coord, np.pad(nodes_demands, ((0, 0), (1, 0)))[:, :, None]), -1)
-        nodes_values = Variable(torch.FloatTensor(nodes_values), requires_grad=False)
-        return edges.to(self.device), edges_values.to(self.device), nodes.to(self.device), nodes_values.to(
-            self.device)
+    @staticmethod
+    def plot_solution_heatmap(instance, heatmap):
+        plot_heatmap(plt.gca(), instance, heatmap.to_dense(), title="Heatmap")
+        plt.show()
 
     @staticmethod
     def _mean_tour_len_edges(edges_values, edges_preds):

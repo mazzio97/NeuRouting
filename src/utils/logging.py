@@ -3,7 +3,9 @@ from numbers import Number
 from typing import Dict, List
 
 import wandb
+from tqdm.auto import tqdm
 
+from tabulate import tabulate
 
 class Logger(ABC):
     @abstractmethod
@@ -14,6 +16,12 @@ class Logger(ABC):
     def log(self, info: Dict[str, Number], phase: str):
         pass
 
+class EmptyLogger(Logger):
+    def new_run(self, run_name):
+        pass
+
+    def log(self, info, phase):
+        pass
 
 class WandBLogger(Logger):
     def __init__(self, project: str = "NeuRouting", username: str = "mazzio97"):
@@ -33,14 +41,48 @@ class WandBLogger(Logger):
         wandb.log(info)
 
 
-class ConsoleLogger(Logger):
+class TabularConsoleLogger(Logger):
+    def __init__(self, headers: List = []):
+        self._content = { k: [] for k in headers }
+        self._headers_printed = False
+
     def new_run(self, run_name: str):
         pass
 
     def log(self, info: Dict[str, Number], phase: str):
-        print(f"[{phase.upper()}]")
-        for k, v in info.items():
-            print(f"{k}: {v}")
+        for k in self._content.keys():
+            v = info.get(k, "") if k != "phase" else phase
+            self._content[k].append(v)
+
+        s = tabulate(self._content, headers="keys")
+        
+        if self._headers_printed:
+            s = s.split("\n")[-2]
+        else:
+            self._headers_printed = True
+        
+        tqdm.write(s)
+
+
+class ConsoleLogger(Logger):
+    def __init__(self):
+        self._header_printed = False
+
+    def new_run(self, run_name: str):
+        pass
+
+    def log(self, info: Dict[str, Number], phase: str):
+        content = { k:[v] for k, v in info.items() }
+        content["phase"] = [phase]
+        
+        s = tabulate(content, headers="keys")
+        
+        if self._header_printed:
+            s = s.split("\n")[2]
+        else:
+            self._header_printed = True
+        
+        tqdm.write(s)
 
 
 class MultipleLogger(Logger):
