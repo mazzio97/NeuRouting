@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 from subprocess import check_output
 
@@ -38,7 +39,8 @@ class LKHSolver(VRPSolver):
             tours = read_solution(output_filename, self.instance.n_customers)
             tours = [Route(t, self.instance) for t in tours]
             self.solution = VRPSolution(self.instance, tours)
-            return self.solution
+            shutil.rmtree(tempdir)
+        return self.solution
 
     @staticmethod
     def write_lkh_par(filename, parameters):
