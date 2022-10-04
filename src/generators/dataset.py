@@ -4,6 +4,8 @@ import queue
 import torch
 from torch_geometric.data import Data
 import numpy as np
+from itertools import chain, repeat
+from more_itertools import chunked
 
 from generators.nazari_generator import generate_nazari_instance
 from instances import VRPInstance, VRPSolution
@@ -111,9 +113,16 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.num_neighbors = num_neighbors
         self.batch_size = batch_size
         self.format = format
+       
+        self._current_nodes = self._sample_nodes()
+        self._produced_nodes = 0
+        self._nodes_mutex = threading.BoundedSemaphore(1)
 
-        self.workers = workers
         self._buffer = queue.Queue()
+        self._done_event = threading.Event()
+
+        self.workers = [threading.Thread(target=self._produce_solution) for _ in range(workers)]
+        for w in self.workers: w.start()
     
     def _sample_nodes(self) -> int:
         """
@@ -137,34 +146,45 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         """
         raise NotImplementedError
 
-    def _produce_solution(self, nodes):
-        while self._buffer_elements.acquire(blocking=False):
+    def _produce_solution(self):
+        while not self._done_event.is_set():
+            # current nodes production is increased by the solution
+            # that is going to produced
+            # if the new solution should be on a different batch size
+            # then change the number of nodes that will be producted
+            # and go on
+            with self._nodes_mutex:
+                self._produced_nodes += 1
+                if self._produced_nodes > self.batch_size:
+                    self._current_nodes = self._sample_nodes()
+                    self._produced_nodes = 1
+                nodes = self._current_nodes
+
             instance = self.generate_instance(nodes)
             solution = self.lkh.solve(instance, max_steps=self.lkh_pass, runs=self.lkh_runs)
-            self._buffer.put(solution, timeout=1)
+            self._buffer.put(solution)
 
     def __iter__(self) -> Iterable[Data]:
         """
         Yields:
             Iterator[Iterable[Data]]: Generated instance in torch geometric format.
         """
-        for _ in range(self.instances):
-            nodes = self._sample_nodes()
+        yielded_samples = 0
+
+        while yielded_samples < self.instances:
+            solution = self._buffer.get()
             
-            # instantiate producers
-            self._buffer_elements = threading.Semaphore(self.batch_size)
-            for _ in range(self.workers):
-                threading.Thread(target=self._produce_solution, args=(nodes,)).start()
-
-            for _ in range(self.batch_size):
-                solution = self._buffer.get()
+            if self.format == "pyg":
+                yield instance_to_PyG(solution.instance, solution, num_neighbors=self.num_neighbors)
+            elif self.format == "vrp":
+                yield solution
+            
+            yielded_samples += 1
+            self._buffer.task_done()
         
-                if self.format == "pyg":
-                    yield instance_to_PyG(solution.instance, solution, num_neighbors=self.num_neighbors)
-                elif self.format == "vrp":
-                    yield solution
-
-                self._buffer.task_done()
+        self._done_event.set()
+        for w in self.workers:
+            w.join()
 
     def __len__(self) -> int:
         """
