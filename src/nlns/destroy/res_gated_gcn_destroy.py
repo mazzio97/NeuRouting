@@ -66,7 +66,7 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         """
         # get probability of edges in the solution
         solution_edges = np.array(solution.as_edges())
-        solution_edges_prob = prob.to_dense()[solution_edges.T].detach().cpu().numpy()
+        solution_edges_prob = prob[solution_edges.T].detach().cpu().numpy()
         # probabilities are computed as 1 - p with p the probability of an edge
         # being in the solution
         # we can thus sample the edges that are unlikely to be in the final solution
@@ -95,9 +95,8 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
                               self.num_neighbors).to(self.device)
         
         with torch.no_grad():
-            prob = self._heatmap_model(pyg)
-            prob = torch.sparse_coo_tensor(data.edge_index, pred).cpu()
-            # TODO: Check for unbatching
+            prob, _ = self._heatmap_model(pyg)
+            prob = prob.squeeze(0)
 
         # remove edges
         solution.destroy_edges(self._edges_to_remove(solution, prob))
@@ -126,7 +125,7 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         """
         batch = self._batch_instances(solutions)
         with torch.no_grad():
-            probs, _ = self._heatmap_model(batch)
+            probs, loss = self._heatmap_model(batch)
 
         for idx, s in enumerate(solutions):
             s.destroy_edges(self._edges_to_remove(s, probs[idx]))
@@ -192,4 +191,18 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         self.optimizer.step()
         self.optimizer.zero_grad()
         
-        return data, loss, dict()
+        return data, loss.item(), dict()
+    
+    def _evaluate(self, data: List[VRPSolution]) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+        """
+        Perform a training step on the procedure.
+
+        Args:
+            data (List[VRPSolution]): Data on which the procedure is trained.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Dict]: Tuple of the form (destroyed data, loss, {})
+        """
+        batch = self._batch_instances(data)
+        probs, loss = self._heatmap_model(batch)
+        return data, loss.item(), dict()

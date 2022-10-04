@@ -46,6 +46,22 @@ class NeuralProcedure(LNSProcedure):
         pass
 
     @abstractmethod
+    def _evaluate(self, data: List[VRPSolution]) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+        """
+        Perform evaluation on the input data.
+
+        Args:
+            data (List[VRPSolution]): Input data
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Dict]: Tuple in the form (out, loss, training_info).
+                training_info is a dict where the keys are the information names
+                and the values the information values. out is the partial solution on which
+                the model has been applied.
+        """
+        pass
+
+    @abstractmethod
     def state_dict(self) -> Dict:
         """
         Returns:

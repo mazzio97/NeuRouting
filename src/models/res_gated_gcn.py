@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch_geometric.nn as gnn
 from torch_geometric.data import Batch
 from torch_geometric.utils import unbatch, to_dense_adj
+from sklearn.utils.class_weight import compute_class_weight
 
 
 class TSPGCNLayer(gnn.MessagePassing):
@@ -173,6 +174,12 @@ class ResidualGatedGCNModel(nn.Module):
         y_adj = torch.sparse_coo_tensor(
             coalesce_y.indices(), coalesce_y.values(), adj_shape).to_dense()
         y = y_adj[data.edge_index[0], data.edge_index[1]].reshape(-1)
+
+        cw = compute_class_weight("balanced", classes=torch.unique(y).numpy(), y=y.numpy())
+        weights = torch.tensor(cw, dtype=torch.float)
         
-        loss = nn.functional.binary_cross_entropy(pred, y)
+        y = torch.vstack((y, 1 - y)).T
+        pred = torch.vstack((pred, 1 - pred)).T
+        
+        loss = nn.functional.binary_cross_entropy(pred, y, weights)
         return pred_adj, loss
