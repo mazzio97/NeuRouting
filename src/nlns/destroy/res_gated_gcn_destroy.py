@@ -1,53 +1,53 @@
 from typing import List, Union, Tuple, Dict
-from utils.logging import Logger
 
 import numpy as np
 import torch
-from matplotlib import pyplot as plt
 from torch import nn
-import torch.nn.functional as F
-from sklearn.utils import compute_class_weight
 from torch import optim
-from torch.autograd import Variable
-from torch_geometric import nn as gnn
 from torch_geometric.data import Data, Batch
 
 from generators.dataset import instance_to_PyG
 
-from baselines import LKHSolver
 from instances import VRPSolution
 from nlns import DestroyProcedure
 from nlns.neural import NeuralProcedure
 from models import ResidualGatedGCNModel
-from utils.visualize import plot_heatmap
-
-class HeatmapModel:
-    def __init__(self, 
-                 device: str, 
-                 hidden_dim: int = 300, 
-                 gcn_layers: int = 30, 
-                 mlp_layers: int = 3):
-        self.device = device
-        self.model = ResidualGatedGCNModel(hidden_dim=hidden_dim,
-                                           mlp_layers=mlp_layers,
-                                           gcn_layers=gcn_layers)
-        self.model.to(device)
-
-    def __call__(self, data: Data):
-        data = data.to(self.device)
-        pred, _ = self.model(data)
-        return torch.sparse_coo_tensor(data.edge_index, pred)
 
 class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
 
-    def __init__(self, 
-                 percentage: float, 
+    def __init__(self,
+                 percentage: float,
                  num_neighbors: int = 20,
-                 model_config: dict = {"device": "cpu"}):
+                 model_config: Dict = {
+                     "device": "cpu",
+                     "hidden_dim": 300,
+                     "gcn_layers": 30,
+                     "mlp_layers": 3
+                 }):
+        """
+        ResGatedGCN destroy method based on the work of Kool, 2019[1].
+        An heatmap of nodes that should end up in the final solution is computed.
+        Nodes whose probability is lower are removed from the solution.
+
+        [1] https://arxiv.org/pdf/1803.08475.pdf
+
+        Args:
+            percentage (float): Percentage of nodes to remove.
+            num_neighbors (int, optional): Number of neighbours edges embedded in each node. Defaults to 20.
+            model_config (Dict, optional): ResGatedGCN parameters. 
+                Defaults to { "device": "cpu", "hidden_dim": 300, "gcn_layers": 30, "mlp_layers": 3 }.
+                See models.ResidualGatedGCNModel for more informations.
+        """
         super().__init__(percentage)
 
         self.device = model_config.pop("device", "cpu")
-        self._heatmap_model = ResidualGatedGCNModel(**model_config)
+
+        hidden_dim = model_config.pop("hidden_dim", 300)
+        gcn_layers = model_config.pop("gcn_layers", 30)
+        mlp_layers = model_config.pop("mlp_layers", 3)
+        self._heatmap_model = ResidualGatedGCNModel(hidden_dim=hidden_dim,
+                                                    mlp_layers=mlp_layers,
+                                                    gcn_layers=gcn_layers)
         self._heatmap_model.to(self.device)
 
         self.num_neighbors = num_neighbors
@@ -72,15 +72,16 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         # we can thus sample the edges that are unlikely to be in the final solution
         # and prune them
         solution_edges_prob = 1 - solution_edges_prob
-        prob_norm = solution_edges_prob / solution_edges_prob.sum() # normalization
-        
+        prob_norm = solution_edges_prob / solution_edges_prob.sum()  # normalization
+
         # randomly sample edges to remove
         n_edges = solution_edges.shape[0]
         n_remove = int(n_edges * self.percentage)
-        to_remove_idx = np.random.choice(range(n_edges), size=n_remove, p=prob_norm, replace=False)
+        to_remove_idx = np.random.choice(
+            range(n_edges), size=n_remove, p=prob_norm, replace=False)
 
         return solution_edges[to_remove_idx]
-        
+
     def __call__(self, solution: VRPSolution):
         """
         Destroy a solution by removing those edges that are less likely
@@ -89,13 +90,17 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         Args:
             solution (VRPSolution): Current solution to be destroyed.
         """
-        pyg = instance_to_PyG(solution.instance, solution, self.num_neighbors).to(self.device)
+        pyg = instance_to_PyG(solution.instance, 
+                              solution,
+                              self.num_neighbors).to(self.device)
+        
         with torch.no_grad():
             prob = self._heatmap_model(pyg)
+            prob = torch.sparse_coo_tensor(data.edge_index, pred).cpu()
             # TODO: Check for unbatching
 
         # remove edges
-        solution.destroy_edges(self._edges_to_remove(solution, prob.cpu()))
+        solution.destroy_edges(self._edges_to_remove(solution, prob))
 
     def _batch_instances(self, solutions: List[VRPSolution]) -> Batch:
         """
@@ -127,17 +132,31 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
             s.destroy_edges(self._edges_to_remove(s, probs[idx]))
 
     def state_dict(self) -> Dict:
+        """
+        Returns:
+            Dict: Neural procedure state dict to save the procedure to disk for later usage.
+        """
         return {
             "model_state_dict": self._heatmap_model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "num_neighbors": self.num_neighbors,
             "percentage": self.percentage
         }
-    
+
     @classmethod
     def load(cls, path: str, device: str = "cpu"):
+        """
+        Load the procedure from file.
+
+        Args:
+            path (str): Path of the saved procedure
+            device (str, optional): Device on which he procedure is loaded. Defaults to "cpu".
+
+        Returns:
+            ResGatedGCNDestroy: The procedure instance
+        """
         state_dict = torch.load(path, map_location=device)
-        res = cls(state_dict["percentage"], 
+        res = cls(state_dict["percentage"],
                   num_neighbors=state_dict["num_neighbors"],
                   model_config={"device": device})
         res._heatmap_model.load_state_dict(state_dict["model_state_dict"])
@@ -146,33 +165,31 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         return res
 
     def _init_train(self):
+        """
+        Initialize training of this neual procedure.
+        """
         self.optimizer = optim.Adam(self._heatmap_model.parameters(), lr=1e-3)
         self._heatmap_model.train()
 
     def _train_step(self, data: List[VRPSolution]) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
-        assert hasattr(self, "optimizer"), "You need to call _init_train before calling _train_step."
+        """
+        Perform a training step on the procedure.
+
+        Args:
+            data (List[VRPSolution]): Data on which the procedure is trained.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Dict]: Tuple of the form (destroyed data, loss, {})
+        """
+        assert hasattr(self, "optimizer"), "Call _init_train before _train_step."
         batch = self._batch_instances(data)
         probs, loss = self._heatmap_model(batch)
 
         for idx, s in enumerate(data):
             s.destroy_edges(self._edges_to_remove(s, probs[idx]))
-        
+
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
         
         return data, loss, dict()
-
-    @staticmethod
-    def plot_solution_heatmap(instance, heatmap):
-        plot_heatmap(plt.gca(), instance, heatmap.to_dense(), title="Heatmap")
-        plt.show()
-
-    @staticmethod
-    def _mean_tour_len_edges(edges_values, edges_preds):
-        y = F.softmax(edges_preds, dim=-1)  # B x V x V x voc_edges
-        y = y.argmax(dim=3)  # B x V x V
-        # Divide by 2 because edges_values is symmetric
-        tour_lens = (y.float() * edges_values.float()).sum(dim=1).sum(dim=1) / 2
-        mean_tour_len = tour_lens.sum().to(dtype=torch.float).item() / tour_lens.numel()
-        return mean_tour_len
