@@ -1,4 +1,6 @@
 from typing import Union, List, Tuple, Iterable
+import threading
+import queue
 import torch
 from torch_geometric.data import Data
 import numpy as np
@@ -70,7 +72,8 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
                  seed: int = 42,
                  lkh_path: str = "executables/LKH",
                  lkh_pass: int = None,
-                 lkh_runs: int = None):
+                 lkh_runs: int = None,
+                 workers: int = 5):
         """
         Implementation of torch's Dataset which takes care of
         the generation of random instances.
@@ -94,6 +97,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
                 Defaults to None which corresponds to the number of customers.
                 The less the passes the better the solution.
             lkh_runs (int, optional): Number of runs over LKH3 solver. 
+            workers (int, optional): Number of workers that produce solutions. Default to 5. 
         """
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -107,6 +111,9 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.num_neighbors = num_neighbors
         self.batch_size = batch_size
         self.format = format
+
+        self.workers = workers
+        self._buffer = queue.Queue()
     
     def _sample_nodes(self) -> int:
         """
@@ -130,6 +137,12 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         """
         raise NotImplementedError
 
+    def _produce_solution(self, nodes):
+        while self._buffer_elements.acquire(blocking=False):
+            instance = self.generate_instance(nodes)
+            solution = self.lkh.solve(instance, max_steps=self.lkh_pass, runs=self.lkh_runs)
+            self._buffer.put(solution, timeout=1)
+
     def __iter__(self) -> Iterable[Data]:
         """
         Yields:
@@ -137,15 +150,21 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         """
         for _ in range(self.instances):
             nodes = self._sample_nodes()
+            
+            # instantiate producers
+            self._buffer_elements = threading.Semaphore(self.batch_size)
+            for _ in range(self.workers):
+                threading.Thread(target=self._produce_solution, args=(nodes,)).start()
 
             for _ in range(self.batch_size):
-                instance = self.generate_instance(nodes)
-                solution = self.lkh.solve(instance, max_steps=self.lkh_pass, runs=self.lkh_runs)
-
+                solution = self._buffer.get()
+        
                 if self.format == "pyg":
-                    yield instance_to_PyG(instance, solution, num_neighbors=self.num_neighbors)
+                    yield instance_to_PyG(solution.instance, solution, num_neighbors=self.num_neighbors)
                 elif self.format == "vrp":
                     yield solution
+
+                self._buffer.task_done()
 
     def __len__(self) -> int:
         """
