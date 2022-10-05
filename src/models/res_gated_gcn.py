@@ -139,12 +139,13 @@ class ResidualGatedGCNModel(nn.Module):
         ])
         self.classification = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
         
-    def forward(self, data: Batch) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, data: Batch, weights: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass on batch of graphs.
 
         Args:
             data (Data): Input graphs.
+            weights (torch.Tensor): Class weights for the 2 classes.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: 
@@ -159,12 +160,12 @@ class ResidualGatedGCNModel(nn.Module):
         edge = torch.cat((edge_d, edge_t), dim=1)
 
         for gcn_l in self.gcn_layers:
-            node_features, edge_features = gcn_l(node, edge, data.edge_index)
+            node, edge = gcn_l(node, edge, data.edge_index)
 
         # compute the probability of an edge being in the final tour
         for mlp_l in self.mlp_layers:
-            pred = mlp_l(edge_features)
-        pred = self.classification(edge_features).reshape(-1)
+            edge = mlp_l(node)
+        pred = self.classification(edge).reshape(-1)
         pred_adj = to_dense_adj(data.edge_index, data.batch, pred)
 
         # turn data.y into dense matrix and extract entries from edge_index
@@ -175,11 +176,11 @@ class ResidualGatedGCNModel(nn.Module):
             coalesce_y.indices(), coalesce_y.values(), adj_shape).to_dense()
         y = y_adj[data.edge_index[0], data.edge_index[1]].reshape(-1)
 
-        cw = compute_class_weight("balanced", classes=torch.unique(y).numpy(), y=y.numpy())
-        weights = torch.tensor(cw, dtype=torch.float)
-        
         y = torch.vstack((y, 1 - y)).T
         pred = torch.vstack((pred, 1 - pred)).T
         
+        if weights is not None:
+            weights = weights.to(pred.device)
+
         loss = nn.functional.binary_cross_entropy(pred, y, weights)
         return pred_adj, loss

@@ -182,11 +182,12 @@ class ResGatedGCNDestroy(NeuralProcedure, DestroyProcedure):
         """
         assert hasattr(self, "optimizer"), "Call _init_train before _train_step."
         batch = self._batch_instances(data)
-        probs, loss = self._heatmap_model(batch)
 
-        for idx, s in enumerate(data):
-            s.destroy_edges(self._edges_to_remove(s, probs[idx]))
-
+        weights = torch.tensor([
+            self.num_neighbors**2 / 2*(self.num_neighbors**2 - 2*self.num_neighbors),
+            self.num_neighbors**2 / 2*(2*self.num_neighbors)
+        ], dtype=torch.float)
+        probs, loss = self._heatmap_model(batch, weights=weights)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
