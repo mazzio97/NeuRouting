@@ -12,3 +12,4 @@ tabulate
 tqdm
 wandb
 imageio
+pytorch-lightning

@@ -205,6 +205,9 @@ class ResGatedGCN(pl.LightningModule):
             self.num_neighbors**2 / 2*(2*self.num_neighbors)
         ], dtype=torch.float)
 
+        if data.is_cuda:
+          weights = weights.cuda()
+
         return self(data, weights=weights)
 
     def training_step(self, data: Batch, batch_idx: int) -> nn.BCELoss:
