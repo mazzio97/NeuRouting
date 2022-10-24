@@ -39,20 +39,27 @@ if __name__ == "__main__":
   
   # following Joshi (2019) and Kool (2022) we train for at most 1500
   # epochs with 500 steps for each epoch.
-  max_steps = args.max_steps if hasattr(args, "max_steps") else (args.batch_size * 500) * 1500
+  steps_per_epoch = 500
+  max_steps = args.max_steps if args.max_steps != None else steps_per_epoch * 1500
   
-  destroy = ResGatedGCN(num_neighbors=args.num_neighbors)
+  destroy = ResGatedGCN(num_neighbors=args.num_neighbors, steps_per_epoch=steps_per_epoch)
   wandb_logger = pl.loggers.WandbLogger(project="NeuRouting")
  
-  trainer = pl.Trainer(max_epochs=None,
+  trainer = pl.Trainer(max_epochs=1,
                        max_steps=max_steps,
                        logger=wandb_logger,
                        log_every_n_steps=args.log_interval,
                        val_check_interval=args.valid_interval,
                        callbacks=[
+                         pl.callbacks.ModelCheckpoint(save_top_k=2, monitor="valid/loss", mode="min", 
+                                                      dirpath=args.out, filename="destroy-{global_step}",
+                                                      every_n_train_steps=steps_per_epoch),
                          pl.callbacks.StochasticWeightAveraging(swa_lrs=1e-2),
-                         pl.callbacks.EarlyStopping(monitor="valid/loss", patience=2)
+                         pl.callbacks.EarlyStopping(monitor="valid/loss", 
+                                                    patience=steps_per_epoch, 
+                                                    mode="min",
+                                                    check_on_train_epoch_end=False,
+                                                    min_delta=1)
                        ])
   
-  #trainer.fit(destroy, datamodule=data)
-    
+  trainer.fit(destroy, datamodule=data)
