@@ -19,7 +19,6 @@ def n_customers(s):
 parser = argparse.ArgumentParser(description='Train neural destroy operator')
 parser.add_argument('-o', '--out', type=str, required=True)
 parser.add_argument('-n', '--n_customers', type=n_customers, required=True)
-parser.add_argument('-t', '--train', type=int, required=True)
 parser.add_argument('-v', '--valid', type=int, required=True)
 parser.add_argument('-b', '--batch-size', type=int, required=True)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -43,7 +42,7 @@ if __name__ == "__main__":
   max_steps = args.max_steps if args.max_steps != None else steps_per_epoch * 1500
   
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, steps_per_epoch=steps_per_epoch)
-  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=arg.out)
+  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting")
  
   trainer = pl.Trainer(max_epochs=1,
                        max_steps=max_steps,
