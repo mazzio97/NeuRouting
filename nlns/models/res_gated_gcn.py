@@ -253,7 +253,4 @@ class ResGatedGCN(pl.LightningModule):
         """
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=self.steps_per_epoch * 5)
-        return {
-            "optimizer": optimizer,
-            "scheduler": scheduler
-        }
+        return [optimizer], [{ "scheduler": scheduler , "monitor": "valid_loss" }]

@@ -2,6 +2,7 @@ import argparse
 import math
 
 import pytorch_lightning as pl
+import torch
 
 from nlns.models.res_gated_gcn import ResGatedGCN
 from nlns.models.dataloader import DataModule
@@ -45,6 +46,8 @@ if __name__ == "__main__":
   wandb_logger = pl.loggers.WandbLogger(project="NeuRouting")
  
   trainer = pl.Trainer(max_epochs=1,
+                       devices=1,
+                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                        max_steps=max_steps,
                        logger=wandb_logger,
                        log_every_n_steps=args.log_interval,
