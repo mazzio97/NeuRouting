@@ -43,7 +43,7 @@ if __name__ == "__main__":
   max_steps = args.max_steps if args.max_steps != None else steps_per_epoch * 1500
   
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, steps_per_epoch=steps_per_epoch)
-  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting")
+  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=arg.out)
  
   trainer = pl.Trainer(max_epochs=1,
                        max_steps=max_steps,
