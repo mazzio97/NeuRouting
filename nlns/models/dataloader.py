@@ -81,12 +81,14 @@ class DataModule(pl.LightningDataModule):
                generator: str = "nazari",
                generator_params: Dict = { "solve": True, "lkh_runs": 1, "lkh_pass": 3 },
                num_neighbors: int = 20,
-               batch_size: int = 32):
+               batch_size: int = 32,
+               steps_per_epoch: int = 500):
     super().__init__()
     self.num_nodes = num_nodes
     self.num_neighbors = num_neighbors
     self.batch_size = batch_size
     self.valid_instances = valid_instances
+    self.steps_per_epoch = steps_per_epoch
     
     if generator == "nazari":
       self.generator_cls = NazariDataset
@@ -99,21 +101,27 @@ class DataModule(pl.LightningDataModule):
     Compute fixed valid and test dataset.
     """
     self.train_dataset = self.generator_cls(
+      self.steps_per_epoch * self.batch_size,
       self.num_nodes, 
       **self.generator_params)
 
     # keep the validation set in memory
-    valid_generator = iter(self.generator_cls(self.num_nodes, **self.generator_params))
-    self.valid_dataset = [next(valid_generator) for _ in range(self.valid_instances)]
+    self.valid_dataset = list(self.generator_cls(self.valid_instances, 
+                                                 self.num_nodes, 
+                                                 **self.generator_params))
     
   def train_dataloader(self):
+    workers = os.cpu_count()
+
     return DataLoader(self.train_dataset, 
                       batch_size=self.batch_size, 
                       collate_fn=partial(collate_fn, num_neighbors=self.num_neighbors),
-                      num_workers=os.cpu_count())
+                      num_workers=workers,
+                      persistent_workers=True,
+                      prefetch_factor=(self.steps_per_epoch // workers))
 
   def val_dataloader(self):
-    return DataLoader(self.valid_dataset, 
+    return DataLoader(self.valid_dataset,
                       batch_size=self.batch_size, 
                       collate_fn=partial(collate_fn, num_neighbors=self.num_neighbors),
                       num_workers=os.cpu_count())

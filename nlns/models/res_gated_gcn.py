@@ -184,12 +184,7 @@ class ResGatedGCN(pl.LightningModule):
                     for split, (rows, cols) in zip(pred_adj.split(1), 
                                                    pred_adj_shapes)]
 
-        # turn both pred and target to 2-class tensors, first class is 1 if the edge
-        # is in the final solution, second class is 1 - first class
-        pred = torch.stack((pred, 1 - pred)).T
-        target = torch.stack((data.y, 1 - data.y)).T
-        loss = nn.functional.binary_cross_entropy(pred, target, weights)
-
+        loss = nn.functional.binary_cross_entropy(pred, data.y)
         return pred_adj, loss
 
     def predict(self, data: Batch) -> Tuple[torch.Tensor, nn.BCELoss]:
@@ -202,16 +197,7 @@ class ResGatedGCN(pl.LightningModule):
         Returns:
             Tuple[torch.Tensor, nn.BCELoss]: Tuple containing the heatmap for each batch and the loss.
         """
-        # Class weights are computed as computed by Joshi (2019)
-        weights = torch.tensor([
-            self.num_neighbors**2 / 2*(self.num_neighbors**2 - 2*self.num_neighbors),
-            self.num_neighbors**2 / 2*(2*self.num_neighbors)
-        ], dtype=torch.float)
-
-        if data.is_cuda:
-          weights = weights.cuda()
-
-        return self(data, weights=weights)
+        return self(data)
 
     def training_step(self, data: Batch, batch_idx: int) -> nn.BCELoss:
         """
@@ -252,5 +238,5 @@ class ResGatedGCN(pl.LightningModule):
             torch.optim.Adam: Optimizer instance.
         """
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=self.steps_per_epoch * 5)
-        return [optimizer], [{ "scheduler": scheduler , "monitor": "valid_loss" }]
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=0, threshold=0.01)
+        return [optimizer], [{ "scheduler": scheduler , "monitor": "valid/loss" }]

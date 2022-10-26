@@ -15,6 +15,7 @@ from nlns.baselines import LKHSolver
 
 class IterableVRPDataset(torch.utils.data.IterableDataset):
     def __init__(self,
+                 n_instances: int,
                  n_customer: Union[int, Tuple[int, int]],
                  solve: bool = False,
                  lkh_path: str = "executables/LKH",
@@ -27,6 +28,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         by a torch.data.DataLoader.
         
         Args:
+            n_instances (int): Instances to generate.
             n_customer (Union[int, Tuple[int, int]]): Amount of customer
                 to generate. Either a constant value of a tuple representing
                 the range in which customers will be sampled.
@@ -41,6 +43,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.lkh_pass = lkh_pass
         self.lkh_runs = lkh_runs
         self.nodes = n_customer
+        self.n_instances = n_instances
         self.solve = solve
         
     def _sample_nodes(self) -> int:
@@ -70,7 +73,11 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         Yields:
             Iterator[Iterable[Data]]: Generated instance in torch geometric format.
         """
-        while True:
+        worker_info = torch.utils.data.get_worker_info()
+        to_generate = self.n_instances if worker_info is None \
+                      else int(math.ceil(self.n_instances / float(worker_info.num_workers)))
+        
+        for _ in range(to_generate):
             nodes = self._sample_nodes()
             instance = self.generate_instance(nodes)
             
