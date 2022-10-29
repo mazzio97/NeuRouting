@@ -29,6 +29,9 @@ parser.add_argument('--valid-interval', type=int, required=False, default=50)
 parser.add_argument('--num-neighbors', type=int, required=False, default=20)
 parser.add_argument('--steps-per-epoch', type=int, required=False, default=500)
 parser.add_argument('--max-epochs', type=int, required=False, default=1500)
+parser.add_argument('--initial-lr', type=float, required=False, default=0.001)
+parser.add_argument('--lr-decay-patience', type=int, required=False, default=1)
+parser.add_argument('--wandb-name', type=str, required=False, default=None)
 
 args = parser.parse_args()
 
@@ -42,8 +45,10 @@ if __name__ == "__main__":
                     num_neighbors=args.num_neighbors)
   
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, 
-                        steps_per_epoch=args.steps_per_epoch)
-  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting")
+                        steps_per_epoch=args.steps_per_epoch,
+                        initial_learning_rate=args.initial_lr,
+                        learning_rate_decay_patience=args.lr_decay_patience)
+  wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=args.wandb_name)
  
   trainer = pl.Trainer(max_epochs=args.max_epochs,
                        devices=1,
