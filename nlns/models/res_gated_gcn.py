@@ -107,7 +107,9 @@ class ResGatedGCN(pl.LightningModule):
                  hidden_dim: int = 300, 
                  mlp_layers: int = 3,
                  gcn_layers: int = 30,
-                 steps_per_epoch: int = 100):
+                 steps_per_epoch: int = 100,
+                 initial_learning_rate: float = 0.001,
+                 learning_rate_decay_patience: int = 0):
         """
         Residual Gated GCN Model as explained in [1].
 
@@ -127,6 +129,8 @@ class ResGatedGCN(pl.LightningModule):
         self.save_hyperparameters()
         self.num_neighbors = num_neighbors
         self.steps_per_epoch = steps_per_epoch
+        self.initial_learning_rate = initial_learning_rate
+        self.learning_rate_decay_patience = learning_rate_decay_patience
 
         self.node_embedding = nn.Linear(4, hidden_dim)
         self.edge_distance_embedding = nn.Linear(1, hidden_dim // 2)
@@ -237,6 +241,6 @@ class ResGatedGCN(pl.LightningModule):
         Returns:
             torch.optim.Adam: Optimizer instance.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=0, threshold=0.01)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.initial_learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=self.learning_rate_decay_patience, threshold=0.01)
         return [optimizer], [{ "scheduler": scheduler , "monitor": "valid/loss" }]
