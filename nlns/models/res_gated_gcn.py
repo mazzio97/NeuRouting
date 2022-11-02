@@ -188,7 +188,7 @@ class ResGatedGCN(pl.LightningModule):
 
         weights = None
         if self.compute_weights:
-            np_y = data.y.numpy()
+            np_y = data.y.cpu().numpy()
             cw = compute_class_weight("balanced", classes=np.unique(np_y), y=np_y)
             weights = torch.tensor(cw).to(pred.device)[1].tile(pred.shape)
         
