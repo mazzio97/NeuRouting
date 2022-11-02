@@ -180,19 +180,23 @@ class ResGatedGCN(pl.LightningModule):
         # compute the probability of an edge being in the final tour
         for mlp_l in self.mlp_layers:
             edge = mlp_l(edge)
-        pred = self.classification(edge).reshape(-1)
+        pred = self.classification(edge)
 
         # compute predicted adjacency matrix
-        pred_adj = to_dense_adj(data.edge_index, data.batch, pred)
+        pred_adj = to_dense_adj(data.edge_index, data.batch, pred.reshape(-1))
         pred_adj = [split[0, :, :] for split in pred_adj.split(1)]
 
         weights = None
         if self.compute_weights:
             np_y = data.y.cpu().numpy()
             cw = compute_class_weight("balanced", classes=np.unique(np_y), y=np_y)
-            weights = torch.tensor(cw).to(pred.device)[1].tile(pred.shape)
-        
-        loss = nn.functional.binary_cross_entropy(pred, data.y, weight=weights)
+            weights = torch.tensor(cw).to(pred.device)
+
+        # turn pred into 2 category loss: edge in the final solution or not
+        pred = torch.cat((pred, 1 - pred), axis=1)
+        y = torch.cat((data.y.reshape(-1, 1), 1 - data.y.reshape(-1, 1)), axis=1)
+
+        loss = nn.functional.binary_cross_entropy(pred, y, weight=weights.float())
         return pred_adj, loss
 
     def predict(self, data: Batch) -> Tuple[torch.Tensor, nn.BCELoss]:
