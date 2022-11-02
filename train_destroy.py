@@ -33,6 +33,7 @@ parser.add_argument('--initial-lr', type=float, required=False, default=0.001)
 parser.add_argument('--lr-decay-patience', type=int, required=False, default=1)
 parser.add_argument('--early-stop-patience', type=int, required=False, default=10)
 parser.add_argument('--wandb-name', type=str, required=False, default=None)
+parser.add_argument('--balanced-training', type=bool, required=False, default=True)
 
 args = parser.parse_args()
 
@@ -48,7 +49,8 @@ if __name__ == "__main__":
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, 
                         steps_per_epoch=args.steps_per_epoch,
                         initial_learning_rate=args.initial_lr,
-                        learning_rate_decay_patience=args.lr_decay_patience)
+                        learning_rate_decay_patience=args.lr_decay_patience,
+                        compute_weights=args.balanced_training)
   wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=args.wandb_name)
  
   trainer = pl.Trainer(max_epochs=args.max_epochs,

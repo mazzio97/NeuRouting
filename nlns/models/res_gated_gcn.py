@@ -2,6 +2,7 @@ from typing import Tuple, Union
 
 import torch
 import torch.nn as nn
+import numpy as np
 import pytorch_lightning as pl
 import torch_geometric.nn as gnn
 from torch_geometric.data import Batch
@@ -109,7 +110,8 @@ class ResGatedGCN(pl.LightningModule):
                  gcn_layers: int = 30,
                  steps_per_epoch: int = 100,
                  initial_learning_rate: float = 0.001,
-                 learning_rate_decay_patience: int = 0):
+                 learning_rate_decay_patience: int = 0, 
+                 compute_weights: bool = False):
         """
         Residual Gated GCN Model as explained in [1].
 
@@ -124,6 +126,7 @@ class ResGatedGCN(pl.LightningModule):
             gcn_layers (int, optional): 
                 Number of convolution layers used for feature computation. Defaults to 30.
             steps_per_epoch (int): Number of steps in an epoch for the LR scheduler. Defaults to 100.
+            compute_weights (bool): Compute class weights for balanced BCE. Defaults to False.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -131,6 +134,7 @@ class ResGatedGCN(pl.LightningModule):
         self.steps_per_epoch = steps_per_epoch
         self.initial_learning_rate = initial_learning_rate
         self.learning_rate_decay_patience = learning_rate_decay_patience
+        self.compute_weights = compute_weights
 
         self.node_embedding = nn.Linear(4, hidden_dim)
         self.edge_distance_embedding = nn.Linear(1, hidden_dim // 2)
@@ -151,13 +155,12 @@ class ResGatedGCN(pl.LightningModule):
         ])
         self.classification = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
         
-    def forward(self, data: Batch, weights: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, data: Batch) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass on batch of graphs.
 
         Args:
             data (Data): Input graphs.
-            weights (torch.Tensor): Class weights for the 2 classes.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: 
@@ -180,15 +183,16 @@ class ResGatedGCN(pl.LightningModule):
         pred = self.classification(edge).reshape(-1)
 
         # compute predicted adjacency matrix
-        edge_indexes = unbatch_edge_index(data.edge_index, data.batch)
-        pred_adj_shapes = [(ei_x.max().item(), ei_y.max().item()) 
-                           for ei_x, ei_y in edge_indexes]
         pred_adj = to_dense_adj(data.edge_index, data.batch, pred)
-        pred_adj = [split[0, :rows, :cols] 
-                    for split, (rows, cols) in zip(pred_adj.split(1), 
-                                                   pred_adj_shapes)]
+        pred_adj = [split[0, :, :] for split in pred_adj.split(1)]
 
-        loss = nn.functional.binary_cross_entropy(pred, data.y)
+        weights = None
+        if self.compute_weights:
+            np_y = data.y.numpy()
+            cw = compute_class_weight("balanced", classes=np.unique(np_y), y=np_y)
+            weights = torch.tensor(cw).to(pred.device)[1].tile(pred.shape)
+        
+        loss = nn.functional.binary_cross_entropy(pred, data.y, weight=weights)
         return pred_adj, loss
 
     def predict(self, data: Batch) -> Tuple[torch.Tensor, nn.BCELoss]:
