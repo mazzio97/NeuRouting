@@ -31,6 +31,7 @@ parser.add_argument('--steps-per-epoch', type=int, required=False, default=500)
 parser.add_argument('--max-epochs', type=int, required=False, default=1500)
 parser.add_argument('--initial-lr', type=float, required=False, default=0.001)
 parser.add_argument('--lr-decay-patience', type=int, required=False, default=1)
+parser.add_argument('--early-stop-patience', type=int, required=False, default=10)
 parser.add_argument('--wandb-name', type=str, required=False, default=None)
 
 args = parser.parse_args()
@@ -62,7 +63,7 @@ if __name__ == "__main__":
                                                       dirpath=args.out, filename="destroy-{epoch}",
                                                       every_n_epochs=1),
                          pl.callbacks.EarlyStopping(monitor="valid/loss", 
-                                                    patience=5, 
+                                                    patience=args.early_stop_patience, 
                                                     mode="min",
                                                     check_on_train_epoch_end=False)
                        ])
