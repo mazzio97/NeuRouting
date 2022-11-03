@@ -12,20 +12,21 @@ import numpy as np
 from nlns.instances import VRPInstance, VRPSolution
 from nlns.generators.dataset import NazariDataset
 
-def instance_to_PyG(sample: VRPSolution, 
+def instance_to_PyG(sample: VRPSolution,
                     num_neighbors: int = 20) -> Data:
     """
     Convert a VRPInstance and optionally a VRPSolution to a torch geometric
     data instance.
 
     Args:
-        sample (VRPSolution): VRP instance to be converted.
+        sample (VRPSolution): VRP solution to be converted.
         num_neighbors (int, optional): Number of neighbours edges embedded for each node. Defaults to 20.
 
     Returns:
         Data: torch geometric data instance
     """
-    instance, solution = sample
+    instance = sample.instance
+    solution = sample
 
     # nodes position
     pos = torch.tensor(np.stack((np.array(instance.depot), *instance.customers)),
@@ -71,7 +72,7 @@ def collate_fn(samples: List[VRPSolution], num_neighbors: int = 20) -> Batch:
       Batch: _description_
   """
   return Batch.from_data_list([
-      instance_to_PyG(s, num_neighbors) for s in samples
+      instance_to_PyG(s, num_neighbors=num_neighbors) for s in samples
   ])
 
 class DataModule(pl.LightningDataModule):
@@ -118,7 +119,7 @@ class DataModule(pl.LightningDataModule):
                       collate_fn=partial(collate_fn, num_neighbors=self.num_neighbors),
                       num_workers=workers,
                       persistent_workers=True,
-                      prefetch_factor=(self.steps_per_epoch // workers))
+                      prefetch_factor=5)
 
   def val_dataloader(self):
     return DataLoader(self.valid_dataset,
