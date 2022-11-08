@@ -68,10 +68,10 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         """
         raise NotImplementedError
 
-    def __iter__(self) -> Iterable[Data]:
+    def __iter__(self) -> Iterable[Union[VRPInstance, VRPSolution]]:
         """
         Yields:
-            Iterator[Iterable[Data]]: Generated instance in torch geometric format.
+            Iterable[Union[VRPInstance, VRPSolution]]: Generated instance in torch geometric format.
         """
         worker_info = torch.utils.data.get_worker_info()
         to_generate = self.n_instances if worker_info is None \
@@ -79,14 +79,11 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         
         for _ in range(to_generate):
             nodes = self._sample_nodes()
-            instance = self.generate_instance(nodes)
+            elem = self.generate_instance(nodes)
             
             if self.solve:
-                solution = self.lkh.solve(instance, max_steps=self.lkh_pass, runs=self.lkh_runs)
-                elem = (instance, solution)
-            else:
-                elem = instance   
-
+                elem = self.lkh.solve(elem, max_steps=self.lkh_pass, runs=self.lkh_runs)
+                
             yield elem 
 
 
