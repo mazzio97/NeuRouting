@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 import torch_geometric.nn as gnn
 from torch_geometric.data import Batch
 from torch_geometric.utils import unbatch, unbatch_edge_index, to_dense_adj
-from sklearn.utils.class_weight import compute_class_weight
+from sklearn.utils.class_weight import compute_sample_weight
 
 
 class TSPGCNLayer(gnn.MessagePassing):
@@ -188,15 +188,10 @@ class ResGatedGCN(pl.LightningModule):
 
         weights = None
         if self.compute_weights:
-            np_y = data.y.cpu().numpy()
-            cw = compute_class_weight("balanced", classes=np.unique(np_y), y=np_y)
+            cw = compute_sample_weight("balanced", y=data.y.cpu().numpy())
             weights = torch.tensor(cw).to(pred.device).float()
 
-        # turn pred into 2 category loss: edge in the final solution or not
-        pred = torch.cat((pred, 1 - pred), axis=1)
-        y = torch.cat((data.y.reshape(-1, 1), 1 - data.y.reshape(-1, 1)), axis=1)
-
-        loss = nn.functional.binary_cross_entropy(pred, y, weight=weights)
+        loss = nn.functional.binary_cross_entropy(pred.reshape(-1), data.y, weight=weights)
         return pred_adj, loss
 
     def predict(self, data: Batch) -> Tuple[torch.Tensor, nn.BCELoss]:
