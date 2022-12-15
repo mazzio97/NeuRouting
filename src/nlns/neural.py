@@ -98,9 +98,9 @@ class NeuralProcedure(LNSProcedure):
         self._val_phase = True
         if self.val_env is None:
             if isinstance(opposite_procedure, RepairProcedure) and isinstance(self, DestroyProcedure):
-                self.val_env = BatchLNSEnvironment(batch_size, [LNSOperator(self, opposite_procedure)], initial)
+                self.val_env = BatchLNSEnvironment(batch_size, LNSOperator(self, opposite_procedure), initial)
             elif isinstance(opposite_procedure, DestroyProcedure) and isinstance(self, RepairProcedure):
-                self.val_env = BatchLNSEnvironment(batch_size, [LNSOperator(opposite_procedure, self)], initial)
+                self.val_env = BatchLNSEnvironment(batch_size, LNSOperator(opposite_procedure, self), initial)
             else:
                 self.val_env = None
             assert self.val_env is not None, f"{opposite_procedure} and {self} should be two opposite LNS procedures."
