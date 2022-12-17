@@ -22,7 +22,7 @@ def generate_nazari_instance(n_customers: int) -> VRPInstance:
         VRPInstance: Final VRPInstance.
     """
     capacity = np.interp(n_customers, [10, 20, 50, 100], [20, 30, 40, 50])
-    return VRPInstance(list(np.random.uniform(size=(2,))), 
-                       list(np.random.uniform(size=(n_customers, 2))), 
+    return VRPInstance(list(np.random.uniform(size=(2,))),
+                       list(np.random.uniform(size=(n_customers, 2))),
                        list(np.random.randint(1, 10, size=(n_customers,))),
                        capacity)

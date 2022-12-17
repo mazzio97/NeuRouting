@@ -20,14 +20,19 @@ from nlns.operators.initial import nearest_neighbor_solution
 from nlns.utils.logging import Logger, EmptyLogger
 
 
-class NeuralProcedure:
-    pass
+class NeuralProcedure(LNSProcedure):
+    def __init__(self, model: nn.Module, device: str = "cpu", logger: Optional[Logger] = None):
+        self.model = model.to(device)
+        self.device = device
+        self.logger = logger
+        self.val_env = None
+        self._val_phase = False
 
 
 class NeuralProcedurePair:
     """
     A neural procedure pair is used to train one (or two) neural procedure(s).
-    This is done by providing a repair and a destroy procedure. 
+    This is done by providing a repair and a destroy procedure.
     Either one or the other procedures needs to be neural based.
     """
     def __init__(self,
@@ -56,8 +61,8 @@ class NeuralProcedurePair:
         """
         target_cost = list()
         incumbent_cost = list()
-        for batch_idx, batch in tqdm(enumerate(chunked(data, batch_size)), 
-                                         desc="Validation batch", 
+        for batch_idx, batch in tqdm(enumerate(chunked(data, batch_size)),
+                                         desc="Validation batch",
                                          leave=False,
                                          total=len(data) // batch_size):
             # work on copies
@@ -70,11 +75,11 @@ class NeuralProcedurePair:
                 self.destroy_procedure.multiple(batch)
                 self.repair_procedure.multiple(batch)
             runtime = time.time() - start_time
-        
+
             incumbent_cost.extend((sol.cost for sol in batch))
 
-        return {"target_solution": np.mean(target_cost), 
-                "incumbent_solution": np.mean(incumbent_cost), 
+        return {"target_solution": np.mean(target_cost),
+                "incumbent_solution": np.mean(incumbent_cost),
                 "time": runtime }
 
     def train(self,
@@ -89,6 +94,10 @@ class NeuralProcedurePair:
         """
         Train the neural procedur pair by both destroy and repair, when needed.
 
+        WIP: currently subject to changes to make the repair neural
+        operator working again. In order to train the destroy operator,
+        see train_destroy.py.
+
         Args:
             train (DataLoader): Training data.
             epochs (int, optional): Number of epochs to train for. Defaults to 1.
@@ -99,6 +108,9 @@ class NeuralProcedurePair:
             log_interval (int, optional): number of steps between logging messages. Defaults to None.
             logger (Logger, optional): Logger. Defaults to EmptyLogger().
         """
+        logger.new_run(f'{type(self.destroy_procedure).__name__}-'
+                       f'{type(self.repair_procedure).__name__}')
+
         can_evaluate = validation is not None and val_interval is not None
         start_time = time.time()
 
@@ -108,10 +120,16 @@ class NeuralProcedurePair:
             self.repair_procedure._init_train()
 
         for epoch in tqdm(range(epochs), desc="Training epoch"):
-            for batch_idx, batch in tqdm(enumerate(chunked(train, batch_size)), 
-                                         desc="Training batch", 
-                                         leave=False,
-                                         total=len(train) // batch_size):
+            for batch_idx, batch in tqdm(
+                enumerate(chunked(train, batch_size)),
+                desc="Training batch",
+                leave=False,
+                    total=train.n_instances // batch_size):
+                batch = [
+                    VRPNeuralSolution.from_solution(
+                        nearest_neighbor_solution(inst))
+                    for inst in batch]
+
                 # work on copies
                 batch = [deepcopy(s) for s in batch]
                 batch_costs = [s.cost for s in batch]
@@ -128,12 +146,13 @@ class NeuralProcedurePair:
                 if self.destroy_is_neural:
                     pred, loss, info = self.destroy_procedure._train_step(batch)
                 else:
-                    pred = self.destroy_procedure.multiple(batch)
+                    self.destroy_procedure.multiple(batch)
+                    pred = batch
 
                 if self.repair_is_neural:
-                    # turn batch back into PyG format as destroy procedure 
+                    # turn batch back into PyG format as destroy procedure
                     # outputs a list of VRPSolution
-                    pred, loss, info = self.repair_procedure._train_step(pred)
+                    self.repair_procedure._train_step(pred)
                 else:
                     pred = self.repair_procedure.multiple(pred)
 
@@ -147,12 +166,28 @@ class NeuralProcedurePair:
                     logger.log(evaluation_results, "validation")
 
                 if log_interval is not None and batch_idx % log_interval == 0:
-                    logger.log({
-                        "target_solution": mean_batch_cost,
-                        "incumbent_solution": mean_repaired_cost,
-                        "time": "NA",
-                        "epoch": epoch,
-                        "epoch_step": batch_idx,
-                    }, "training")
+                    log_dict = {
+                        'target_solution': mean_batch_cost,
+                        'incumbent_solution': mean_repaired_cost
+                    }
+
+                    if self.destroy_is_neural:
+                        log_dict.update(
+                            self.destroy_procedure._train_info(
+                                epoch, batch_idx, log_interval))
+
+                    if self.repair_is_neural:
+                        log_dict.update(
+                            self.repair_procedure._train_info(
+                                epoch, batch_idx, log_interval))
+
+                    logger.log(log_dict, 'train')
+                    # logger.log({
+                    #     "target_solution": mean_batch_cost,
+                    #     "incumbent_solution": mean_repaired_cost,
+                    #     "time": "NA",
+                    #     "epoch": epoch,
+                    #     "epoch_step": batch_idx,
+                    # }, "training")
 
         print(f"Training completed successfully in {time.time() - start_time} seconds.")

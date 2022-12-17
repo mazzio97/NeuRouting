@@ -13,7 +13,8 @@ from nlns.operators import DestroyProcedure
 #from nlns.neural import NeuralProcedure
 
 from nlns.models.dataloader import collate_fn
-from nlns.models import ResidualGatedGCNModel
+from nlns.models import ResGatedGCN
+
 
 class ResGatedGCNDestroy(DestroyProcedure):
     def __init__(self,
@@ -87,7 +88,7 @@ class ResGatedGCNDestroy(DestroyProcedure):
         """
         solution_copies = [deepcopy(s) for s in solutions]
         batch = collate_fn(solution_copies)
-        
+
         with torch.no_grad():
             prob, _ = self._heatmap_model(pyg)
             prob = prob.squeeze(0)
@@ -124,7 +125,7 @@ class ResGatedGCNDestroy(DestroyProcedure):
         """
         optimizer = torch.optim.Adam(self.heatmap_model.parameters(), lr=1e-3)
         return optimizer
-    
+
     def _evaluate(self, data: List[VRPSolution]) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
         """
         Perform a training step on the procedure.
