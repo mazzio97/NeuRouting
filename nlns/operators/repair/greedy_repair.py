@@ -1,6 +1,6 @@
 import numpy as np
 
-from instances import VRPSolution
+from nlns.instances import VRPSolution
 from nlns.operators import RepairProcedure
 from nlns.operators.initial.nearest_neighbor import closest_locations
 

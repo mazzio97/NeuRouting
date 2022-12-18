@@ -6,8 +6,8 @@ import numpy as np
 import torch.nn.functional as F
 from torch import optim
 
-from nlns import RepairProcedure
-from nlns.neural import NeuralProcedure
+from nlns.operators import RepairProcedure
+from nlns.operators.neural import NeuralProcedure
 from nlns.instances.vrp_neural_solution import VRPNeuralSolution
 from nlns.models import VRPActorModel, VRPCriticModel
 
@@ -54,11 +54,11 @@ class RLAgentRepair(NeuralProcedure, RepairProcedure):
         self.rewards = []
         self.diversity_values = []
 
-    def _train_step(self, opposite_procedure, train_batch):
-        opposite_procedure.multiple(train_batch)
-        costs_destroyed = [solution.cost() for solution in train_batch]
+    def _train_step(self, train_batch):
+        # opposite_procedure.multiple(train_batch)
+        costs_destroyed = [solution.cost for solution in train_batch]
         _, tour_logp, critic_est = self.multiple(train_batch)
-        costs_repaired = [solution.cost() for solution in train_batch]
+        costs_repaired = [solution.cost for solution in train_batch]
 
         # Reward/Advantage computation
         reward = np.array(costs_repaired) - np.array(costs_destroyed)

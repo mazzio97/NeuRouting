@@ -26,7 +26,7 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         the generation of random instances.
         Infinitely many instances are generated, until StopIteration is raised
         by a torch.data.DataLoader.
-        
+
         Args:
             n_instances (int): Instances to generate.
             n_customer (Union[int, Tuple[int, int]]): Amount of customer
@@ -34,10 +34,10 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
                 the range in which customers will be sampled.
             solve (bool, optional): If True instances are solved using LKH-3. Defaults to False.
             lkh_path (str, optional): Path to LKH3 solver. Defaults to "executables/LKH".
-            lkh_pass (int, optional): Number of passes over LKH3 solver. 
+            lkh_pass (int, optional): Number of passes over LKH3 solver.
                 Defaults to None which corresponds to the number of customers.
                 The less the passes the better the solution.
-            lkh_runs (int, optional): Number of runs over LKH3 solver. 
+            lkh_runs (int, optional): Number of runs over LKH3 solver.
         """
         self.lkh = LKHSolver(lkh_path)
         self.lkh_pass = lkh_pass
@@ -45,12 +45,12 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.nodes = n_customer
         self.n_instances = n_instances
         self.solve = solve
-        
+
     def _sample_nodes(self) -> int:
         """
         Returns:
             int: Number of nodes in the generated instance. The result varies depending on
-                 the initialization arguments. 
+                 the initialization arguments.
         """
         if type(self.nodes) == int:
             return self.nodes
@@ -76,15 +76,15 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         worker_info = torch.utils.data.get_worker_info()
         to_generate = self.n_instances if worker_info is None \
                       else int(math.ceil(self.n_instances / float(worker_info.num_workers)))
-        
+
         for _ in range(to_generate):
             nodes = self._sample_nodes()
             elem = self.generate_instance(nodes)
-            
+
             if self.solve:
                 elem = self.lkh.solve(elem, max_steps=self.lkh_pass, runs=self.lkh_runs)
-                
-            yield elem 
+
+            yield elem
 
 
 class NazariDataset(IterableVRPDataset):
