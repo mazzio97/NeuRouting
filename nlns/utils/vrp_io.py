@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 from more_itertools import split_after
 
-from nlns.instances import VRPInstance
+from nlns.instances import VRPInstance, VRPSolution
 
 
 GRID_DIM = 100000
@@ -87,3 +87,13 @@ def read_solution(filename: str, n: int) -> List[List[int]]:
     tour[tour > n] = 0  # Any nodes above the number of nodes there are is also depot
     tour = tour[1:].tolist() + [0]
     return list([0] + t for t in split_after(tour, lambda x: x == 0))
+
+def write_solution(solution: VRPSolution, filename: str):
+    with open(filename, 'w') as f:
+        f.write(f"DIMENSION {GRID_DIM}\n")
+        f.write("TOUR_SECTION\n")
+        last = None
+        for tour in solution.routes:
+            for node in tour[:-1]:
+                f.write(f"{node + 1}\n")
+        f.write("-1\n")
