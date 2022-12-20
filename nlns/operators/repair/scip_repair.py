@@ -22,18 +22,18 @@ class SCIPRepair(RepairProcedure):
         return [tuple([int(n) for n in re.findall(r'\d+', name)])
                 for name, val in assignment.items() if val > 0.99]
 
-    def multiple(self, partial_solutions: List[VRPSolution]):
+    def __call__(self, partial_solutions: List[VRPSolution]):
         if len(partial_solutions) == 1:
-            results = [self(partial_solutions[0])]
+            results = [self._repair(partial_solutions[0])]
         else:
             with Pool(os.cpu_count()) as pool:
-                results = pool.map(self, partial_solutions)
+                results = pool.map(self._repair, partial_solutions)
                 pool.close()
                 pool.join()
         for sol, res in zip(partial_solutions, results):
             sol.routes = res.routes
 
-    def __call__(self, partial_solution: VRPSolution):
+    def _repair(self, partial_solution: VRPSolution):
         model = VRPModelSCIP(partial_solution.instance, lns_only=True)
         model.hideOutput()
         sub_mip = Model(sourceModel=model, origcopy=True)
