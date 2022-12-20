@@ -34,6 +34,7 @@ parser.add_argument('--lr-decay-patience', type=int, required=False, default=1)
 parser.add_argument('--early-stop-patience', type=int, required=False, default=10)
 parser.add_argument('--wandb-name', type=str, required=False, default=None)
 parser.add_argument('--balanced-training', type=bool, required=False, default=True)
+parser.add_argument('--save', type=str, required=False, default=None)
 
 args = parser.parse_args()
 
@@ -44,7 +45,8 @@ if __name__ == "__main__":
                     valid_instances=args.valid,
                     steps_per_epoch=args.steps_per_epoch,
                     batch_size=args.batch_size,
-                    num_neighbors=args.num_neighbors)
+                    num_neighbors=args.num_neighbors,
+                    save_path=args.save)
   
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, 
                         steps_per_epoch=args.steps_per_epoch,

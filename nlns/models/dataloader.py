@@ -10,6 +10,7 @@ import pytorch_lightning as pl
 import numpy as np
 
 from nlns.instances import VRPInstance, VRPSolution
+from nlns.utils.vrp_io import write_vrp
 from nlns.generators.dataset import NazariDataset
 
 def instance_to_PyG(sample: VRPSolution,
@@ -37,7 +38,7 @@ def instance_to_PyG(sample: VRPSolution,
     x = torch.cat((pos, torch.zeros((pos.shape[0], 1), dtype=torch.float)), axis=1)
     x[0, -1] = 1
     x = torch.cat((x, torch.zeros((x.shape[0], 1), dtype=torch.float)), axis=1)
-    x[1:, -1] = torch.tensor(instance.demands / instance.capacity, dtype=torch.float)
+    x[1:, -1] = torch.tensor(np.array(instance.demands) / instance.capacity, dtype=torch.float)
     # edge_index is the adjacency matrix in COO format
     adj = torch.tensor(instance.adjacency_matrix(num_neighbors), dtype=torch.float)
     connected = adj > 0
@@ -83,7 +84,8 @@ class DataModule(pl.LightningDataModule):
                generator_params: Dict = { "solve": True, "lkh_runs": 1, "lkh_pass": 3 },
                num_neighbors: int = 20,
                batch_size: int = 32,
-               steps_per_epoch: int = 500):
+               steps_per_epoch: int = 500,
+               save_path: Union[None, str] = None):
     super().__init__()
     self.num_nodes = num_nodes
     self.num_neighbors = num_neighbors
@@ -91,6 +93,14 @@ class DataModule(pl.LightningDataModule):
     self.valid_instances = valid_instances
     self.steps_per_epoch = steps_per_epoch
     
+    self.save_path = save_path
+    if self.save_path != None:
+      assert os.path.exists(self.save_path), "Save directory doesn't exists!"
+      if not os.path.exists(os.path.join(self.save_path, "train")):
+        os.mkdir(os.path.join(self.save_path, "train"))
+      if not os.path.exists(os.path.join(self.save_path, "valid")):
+        os.mkdir(os.path.join(self.save_path, "valid"))
+        
     if generator == "nazari":
       self.generator_cls = NazariDataset
       self.generator_params = generator_params
@@ -104,11 +114,13 @@ class DataModule(pl.LightningDataModule):
     self.train_dataset = self.generator_cls(
       self.steps_per_epoch * self.batch_size,
       self.num_nodes, 
+      save_path = os.path.join(self.save_path, "train") if self.save_path != None else None,
       **self.generator_params)
 
     # keep the validation set in memory
     self.valid_dataset = list(self.generator_cls(self.valid_instances, 
                                                  self.num_nodes, 
+                                                 save_path = os.path.join(self.save_path, "valid") if self.save_path != None else None,
                                                  **self.generator_params))
     
   def train_dataloader(self):
