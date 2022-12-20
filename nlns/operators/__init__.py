@@ -25,7 +25,7 @@ class DestroyProcedure(LNSProcedure):
         self.percentage = percentage
 
     @abstractmethod
-    def __call__(self, solution: VRPSolution):
+    def __call__(self, solutions: List[VRPSolution]):
         pass
 
 

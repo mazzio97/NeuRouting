@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 
@@ -6,7 +6,7 @@ from nlns.instances import VRPSolution
 from nlns.operators import DestroyProcedure
 
 
-class DestroyTourBased(DestroyProcedure):
+class TourDestroy(DestroyProcedure):
     """Tour based destroy. Remove all tours closest to a randomly selected point from a solution."""
 
     def __init__(self, percentage: float, point: Tuple[float, float] = None):
@@ -17,7 +17,10 @@ class DestroyTourBased(DestroyProcedure):
         else:
             self.point = lambda: point
 
-    def __call__(self, solution: VRPSolution):
+    def __call__(self, solutions: List[VRPSolution]):
+        return [ self._destroy(s) for s in solutions ]
+
+    def _destroy(self, solution: VRPSolution):
         # Make a dictionary that maps customers to tours
         customer_to_tour = {}
         for i, tour in enumerate(solution.routes):
