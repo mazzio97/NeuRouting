@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, List
+from typing import Iterable, Tuple, List, Callable
 
 from time import time
 from copy import deepcopy
@@ -9,10 +9,9 @@ import random
 import numpy as np
 import torch
 
-from nlns.environments import VRPEnvironment
 from nlns.instances import VRPInstance, VRPSolution, VRPNeuralSolution
 from nlns.operators import DestroyProcedure, RepairProcedure, LNSOperator, LNSProcedure
-from nlns.initial import nearest_neighbor_solution
+from nlns.operators.initial import nearest_neighbor_solution
 from nlns.utils.visualize import record_gif
 
 
@@ -29,7 +28,8 @@ class BaseLargeNeighborhoodSearch(ABC):
             if min(cost(N)) < cost(Sol) -> Sol = argmin(cost(N))
             if acceptance_criteria(N, Best) -> Best = argmin(cost(N))
     """
-    def __init__(self):
+    def __init__(self, initial_solution_fn: Callable):
+        self._initial_solution_fn = initial_solution_fn
         self._history = list()
         self._iteration_durations = list()
 
@@ -44,7 +44,7 @@ class BaseLargeNeighborhoodSearch(ABC):
         Returns:
             VRPSolution: Initial solution.
         """
-        return nearest_neighbor_solution(instance)
+        return self._initial_solution_fn(instance)
 
     def neighborhood(self, solution: VRPSolution, size: int) -> List[VRPSolution]:
         """
@@ -128,7 +128,6 @@ class BaseLargeNeighborhoodSearch(ABC):
             neighborhood_size (int, optional): Neighborhood size. 
                 Highly dependant on the instance to be solved for maximum efficiency. Defaults to 100.
             max_time (float, optional): Maximum time allowed for the search in seconds. Defaults to 5 minutes (300s).
-            destroy_perc (float, optional): Percentage of the solution (0 <= p <= 1). Defaults to 0.2.
 
         Returns:
             VRPSolution: Best solution found in the specified time.
@@ -145,8 +144,8 @@ class BaseLargeNeighborhoodSearch(ABC):
             N = self.neighborhood(current_best, neighborhood_size)
 
             iteration_start = time()
-            self.destroy(N)
-            self.repair(N)
+            N = self.destroy(N)
+            N = self.repair(N)
             self._iteration_durations.append(time() - iteration_start)
 
             # retrieve best solution in neighborhood
@@ -161,7 +160,7 @@ class BaseLargeNeighborhoodSearch(ABC):
                     overall_best = current_best
                     self._history.append(overall_best)
 
-
+        overall_best.time_taken = time() - initial_time
         return overall_best
 
     @property
@@ -186,17 +185,18 @@ class LNS(BaseLargeNeighborhoodSearch):
     for destroying and one for repairing a solution are provided.
     """
     def __init__(self,
+                 initial_solution_fn: Callable,
                  destroy_procedure: DestroyProcedure,
                  repair_procedure: RepairProcedure):
-        super().__init__()
+        super().__init__(initial_solution_fn)
         self.destroy_procedure = destroy_procedure
         self.repair_procedure = repair_procedure
 
-    def destroy(self, instances: List[VRPSolution]):
-        self.destroy_procedure.multiple(instances)
+    def destroy(self, instances: List[VRPSolution]) -> List[VRPSolution]:
+        return self.destroy_procedure(instances)
 
-    def repair(self, instances: List[VRPSolution]):
-        self.repair_procedure.multiple(instances)
+    def repair(self, instances: List[VRPSolution]) -> List[VRPSolution]:
+        return self.repair_procedure(instances)
 
 class MultiOperatorLNS(BaseLargeNeighborhoodSearch):
     """
@@ -205,19 +205,20 @@ class MultiOperatorLNS(BaseLargeNeighborhoodSearch):
     Destroy and repair procedures are selected at random.
     """
     def __init__(self,
+                 initial_solution_fn: Callable,
                  destroy_procedures: List[DestroyProcedure],
                  repair_procedures: List[RepairProcedure]):
-        super().__init__()
+        super().__init__(initial_solution_fn)
         self.destroy_procedures = destroy_procedures
         self.repair_procedures = repair_procedures
 
-    def destroy(self, instances: List[VRPSolution]):
+    def destroy(self, instances: List[VRPSolution]) -> List[VRPSolution]:
         destroy = random.choice(self.destroy_procedures)
-        destroy.multiple(instances)
+        return destroy(instances)
 
-    def repair(self, instances: List[VRPSolution]):
+    def repair(self, instances: List[VRPSolution]) -> List[VRPSolution]:
         repair = random.choice(self.repair_procedures)
-        repair.multiple(instances)
+        return repair(instances)
 
 class AdaptiveLNS(MultiOperatorLNS):
     """
@@ -231,6 +232,7 @@ class AdaptiveLNS(MultiOperatorLNS):
         (cost(S_new) - cost(S_best)) / time_taken(S_new)
     """
     def __init__(self,
+                 initial_solution_fn: Callable,
                  destroy_procedures: List[DestroyProcedure],
                  repair_procedures: List[RepairProcedure],
                  alpha: float = 0.2):
@@ -240,7 +242,7 @@ class AdaptiveLNS(MultiOperatorLNS):
             repair_procedures (List[RepairProcedure]): See MultiOperatorLNS.
             alpha (float, optional): Exponential moving average alpha value. Defaults to 0.2.
         """
-        super().__init__(destroy_procedures, repair_procedures)
+        super().__init__(initial_solution_fn, destroy_procedures, repair_procedures)
         self.alpha = alpha
 
         # last destroy and repair are used to keep track of which
@@ -275,15 +277,15 @@ class AdaptiveLNS(MultiOperatorLNS):
         
         return procedures[idx]
 
-    def destroy(self, instances: List[VRPSolution]):
+    def destroy(self, instances: List[VRPSolution]) -> List[VRPSolution]:
         destroy = self._performance_select(self.destroy_procedures, self._destroy_performance)
         self._last_destroy = destroy
-        destroy.multiple(instances)
+        return destroy(instances)
 
-    def repair(self, instances: List[VRPSolution]):
+    def repair(self, instances: List[VRPSolution]) -> List[VRPSolution]:
         repair = self._performance_select(self.repair_procedures, self._repair_performance)
         self._last_repair = repair
-        repair.multiple(instances)
+        return repair(instances)
 
     def new_solution_found(self, old_solution: VRPSolution, new_solution: VRPSolution):
         """
