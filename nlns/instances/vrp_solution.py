@@ -62,6 +62,7 @@ class VRPSolution:
     def __init__(self, instance: VRPInstance, routes: List[Route] = None):
         self.instance = instance
         self.routes = routes if routes is not None else []
+        self.time_taken = -1
 
     @classmethod
     def from_edges(cls, instance: VRPInstance, edges: List[tuple] = None):

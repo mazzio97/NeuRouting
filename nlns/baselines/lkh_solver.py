@@ -2,15 +2,16 @@ import os
 import shutil
 import tempfile
 from subprocess import check_output
+from time import time
 
-from nlns.environments import VRPSolver
+#from nlns.environments import VRPSolver
 from nlns.instances import VRPSolution, Route, VRPInstance
 from nlns.utils.vrp_io import write_vrp, read_solution, read_vrp
 
 
-class LKHSolver(VRPSolver):
+class LKHSolver():
     def __init__(self, executable: str):
-        super().__init__("lkh")
+        #super().__init__("lkh")
         self.executable = executable
 
     def reset(self, instance: VRPInstance):
@@ -34,10 +35,13 @@ class LKHSolver(VRPSolver):
                       "MAX_TRIALS": max_steps}
                       #"RUNS": runs}
             self.write_lkh_par(param_filename, params)
+            start_t = time()
             check_output([self.executable, param_filename])
+            end_t = time()
             tours = read_solution(output_filename, instance.n_customers)
             tours = [Route(t, instance) for t in tours]
             solution = VRPSolution(instance, tours)
+            solution.time_taken = end_t - start_t
         return solution
 
     @staticmethod
