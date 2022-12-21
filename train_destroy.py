@@ -67,7 +67,7 @@ if __name__ == "__main__":
                                                       dirpath=args.out, filename="destroy-{epoch}",
                                                       every_n_epochs=1),
                          pl.callbacks.EarlyStopping(monitor="valid/loss", 
-                                                    patience=args.early_stop_patience, 
+                                                    patience=args.early_stop_patience * args.steps_per_epoch, 
                                                     mode="min",
                                                     check_on_train_epoch_end=False)
                        ])
