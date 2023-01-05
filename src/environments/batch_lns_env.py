@@ -42,7 +42,7 @@ class BatchLNSEnvironment(LargeNeighborhoodSearch, VRPEnvironment):
                 begin = i * self.batch_size
                 end = min((i + 1) * self.batch_size, n_solutions)
                 self.operators[0].destroy.multiple(self.solution[begin:end])
-                self.operators[0].destroy.multiple(self.solution[begin:end])
+                self.operators[0].repair.multiple(self.solution[begin:end])
 
         for i in range(n_solutions):
             cost = self.solution[i].cost()

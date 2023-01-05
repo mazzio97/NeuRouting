@@ -66,7 +66,12 @@ class NeuralProcedure(LNSProcedure):
                 self._train_step(opposite, train_solutions[begin:end])
 
                 if self.logger is not None and (batch_idx + 1) % log_interval == 0:
-                    self.logger.log(self._train_info(epoch, batch_idx, log_interval), phase="train")
+                    train_info = self._train_info(epoch, batch_idx,
+                                                  log_interval)
+                    train_info.update({
+                        'mean_batch_cost': np.mean([sol.cost() for sol in train_solutions[begin:end]])
+                    })
+                    self.logger.log(train_info, phase="train")
 
                 if val_instances is not None and ((batch_idx + 1) % val_interval == 0 or batch_idx + 1 == n_batches):
                     self.model.eval()
