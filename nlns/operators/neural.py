@@ -73,12 +73,10 @@ class NeuralProcedurePair:
 
             n_batches = ceil(n_solutions / batch_size)
             for i in range(n_batches):
-                with torch.no_grad():
-                    begin = i * batch_size
-                    end = min((i + 1) * batch_size, n_solutions)
-                    self.destroy_procedure(validation_solutions[begin:end])
-                    self.repair_procedure.multiple(
-                        validation_solutions[begin:end])
+                begin = i * batch_size
+                end = min((i + 1) * batch_size, n_solutions)
+                self.destroy_procedure(validation_solutions[begin:end])
+                self.repair_procedure(validation_solutions[begin:end])
 
             for i in range(n_solutions):
                 cost = validation_solutions[i].cost
@@ -164,7 +162,7 @@ class NeuralProcedurePair:
                     # outputs a list of VRPSolution
                     self.repair_procedure._train_step(pred)
                 else:
-                    pred = self.repair_procedure.multiple(pred)
+                    pred = self.repair_procedure(pred)
 
                 repaired_costs = [p.cost for p in pred]
                 mean_repaired_cost = sum(repaired_costs) / len(repaired_costs)

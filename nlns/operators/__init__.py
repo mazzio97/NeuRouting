@@ -31,7 +31,7 @@ class DestroyProcedure(LNSProcedure):
 
 class RepairProcedure(LNSProcedure):
     @abstractmethod
-    def __call__(self, solution: VRPSolution):
+    def __call__(self, solutions: VRPSolution):
         pass
 
 
