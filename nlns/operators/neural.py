@@ -58,28 +58,38 @@ class NeuralProcedurePair:
                     "incumbent_solution": Mean score of solutions found by the neural operator
                     "time": Time taken to compute the solution
         """
-        target_cost = list()
-        incumbent_cost = list()
-        for batch_idx, batch in tqdm(enumerate(chunked(data, batch_size)),
-                                         desc="Validation batch",
-                                         leave=False,
-                                         total=len(data) // batch_size):
-            # work on copies
-            batch = [deepcopy(s) for s in batch]
+        start_time = time.time()
 
-            target_cost.extend((s.cost for s in batch))
+        validation_solutions = [
+            VRPNeuralSolution.from_solution(
+                nearest_neighbor_solution(instance)) for
+            instance in data]
+        costs = [solution.cost for solution in validation_solutions]
 
-            start_time = time.time()
-            with torch.no_grad():
-                self.destroy_procedure.multiple(batch)
-                self.repair_procedure.multiple(batch)
-            runtime = time.time() - start_time
+        # Assuming all the instances have the same number of customers
+        for _ in range(validation_solutions[0].instance.n_customers):
+            backup_copies = [deepcopy(sol) for sol in validation_solutions]
+            n_solutions = len(validation_solutions)
 
-            incumbent_cost.extend((sol.cost for sol in batch))
+            n_batches = ceil(n_solutions / batch_size)
+            for i in range(n_batches):
+                with torch.no_grad():
+                    begin = i * batch_size
+                    end = min((i + 1) * batch_size, n_solutions)
+                    self.destroy_procedure(validation_solutions[begin:end])
+                    self.repair_procedure.multiple(
+                        validation_solutions[begin:end])
 
-        return {"target_solution": np.mean(target_cost),
-                "incumbent_solution": np.mean(incumbent_cost),
-                "time": runtime }
+            for i in range(n_solutions):
+                cost = validation_solutions[i].cost
+                # Only "accept" improving solutions
+                if costs[i] < cost:
+                    validation_solutions[i] = backup_copies[i]
+                else:
+                    costs[i] = cost
+
+        return {"mean_cost": np.mean(costs),
+                "time": time.time() - start_time}
 
     def train(self,
               train: DataLoader,
