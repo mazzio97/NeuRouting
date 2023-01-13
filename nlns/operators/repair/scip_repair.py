@@ -33,6 +33,8 @@ class SCIPRepair(RepairProcedure):
         for sol, res in zip(partial_solutions, results):
             sol.routes = res.routes
 
+        return partial_solutions
+
     def _repair(self, partial_solution: VRPSolution):
         model = VRPModelSCIP(partial_solution.instance, lns_only=True)
         model.hideOutput()
