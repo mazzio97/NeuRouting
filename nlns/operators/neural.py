@@ -13,7 +13,6 @@ from torch_geometric.data import DataLoader
 import pytorch_lightning as pl
 
 from tqdm.auto import tqdm
-from nlns.environments.batch_lns_env import BatchLNSEnvironment
 from nlns.instances import VRPInstance, VRPSolution, VRPNeuralSolution
 from nlns.operators import LNSProcedure, RepairProcedure, DestroyProcedure, LNSOperator
 from nlns.operators.initial import nearest_neighbor_solution
@@ -119,19 +118,20 @@ class NeuralProcedurePair:
         if self.repair_is_neural:
             self.repair_procedure._init_train()
 
+        # Pregenerate initial solutions
+        initial_solutions = [
+            VRPNeuralSolution.from_solution(
+                nearest_neighbor_solution(inst))
+            for inst in train]
+
         for epoch in tqdm(range(epochs), desc="Training epoch"):
             for batch_idx, batch in tqdm(
-                enumerate(chunked(train, batch_size)),
+                enumerate(chunked(initial_solutions, batch_size)),
                 desc="Training batch",
                 leave=False,
-                    total=train.n_instances // batch_size):
-                batch = [
-                    VRPNeuralSolution.from_solution(
-                        nearest_neighbor_solution(inst))
-                    for inst in batch]
+                total=len(initial_solutions) // batch_size):
 
-                # work on copies
-                batch = [deepcopy(s) for s in batch]
+                # batch = [deepcopy(s) for s in batch]
                 batch_costs = [s.cost for s in batch]
                 mean_batch_cost = sum(batch_costs) / len(batch_costs)
 
@@ -146,7 +146,7 @@ class NeuralProcedurePair:
                 if self.destroy_is_neural:
                     pred, loss, info = self.destroy_procedure._train_step(batch)
                 else:
-                    self.destroy_procedure.multiple(batch)
+                    self.destroy_procedure(batch)
                     pred = batch
 
                 if self.repair_is_neural:

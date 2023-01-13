@@ -5,8 +5,9 @@ import numpy as np
 
 from nlns.utils.logging import MultipleLogger, ConsoleLogger, WandBLogger
 from nlns.operators.neural import NeuralProcedurePair
-from nlns.operators.destroy import DestroyPointBased, DestroyTourBased, ResGatedGCNDestroy, RandomDestroy
-from nlns.operators.repair import SCIPRepair, GreedyRepair, RLAgentRepair
+from nlns.operators.destroy import PointDestroy, TourDestroy, HeatmapDestroy, RandomDestroy
+from nlns.operators.repair import SCIPRepair, GreedyRepair
+from nlns.operators.repair.rl_agent_repair import RLAgentRepair
 from nlns.models import VRPActorModel, VRPCriticModel
 from nlns.generators.dataset import NazariDataset
 
@@ -21,10 +22,10 @@ def main(args: argparse.Namespace):
         logger.add(WandBLogger(args.wandb_name))
 
     destroy_operator_map = {
-        "point": lambda: DestroyPointBased(args.destroy_percentage),
-        "tour": lambda: DestroyTourBased(args.destroy_percentage),
+        "point": lambda: PointDestroy(args.destroy_percentage),
+        "tour": lambda: TourDestroy(args.destroy_percentage),
         "random": lambda: RandomDestroy(args.destroy_percentage),
-        "neural": lambda: ResGatedGCNDestroy(args.destroy_percentage, model_config={"device": device})
+        "neural": lambda: HeatmapDestroy(args.destroy_percentage, model_config={"device": device})
     }
     destroy_operator = destroy_operator_map[args.destroy]()
 
