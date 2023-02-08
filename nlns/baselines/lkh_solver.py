@@ -20,10 +20,9 @@ class LKHSolver():
     def initial_solution(self, instance: VRPInstance):
         return self.solve(instance, max_steps=1)
 
-    def solve(self, instance: VRPInstance, max_steps=None, runs=10, time_limit=None):
+    def solve(self, instance: VRPInstance, runs=10, time_limit=None):
         # assert time_limit is None, "LKH3 does not provide any time limitation parameter"
-        if max_steps is None:
-            max_steps = instance.n_customers
+        max_steps = instance.n_customers
         with tempfile.TemporaryDirectory() as tempdir:
             problem_filename = os.path.join(tempdir, "problem.vrp")
             output_filename = os.path.join(tempdir, "output.tour")
@@ -32,8 +31,7 @@ class LKHSolver():
             write_vrp(instance, problem_filename)
             params = {"PROBLEM_FILE": problem_filename,
                       "OUTPUT_TOUR_FILE": output_filename,
-                      "MAX_TRIALS": max_steps}
-                      #"RUNS": runs}
+                      "RUNS": runs }
             self.write_lkh_par(param_filename, params)
             start_t = time()
             check_output([self.executable, param_filename])
