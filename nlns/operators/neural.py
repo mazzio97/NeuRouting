@@ -13,7 +13,6 @@ from torch_geometric.data import DataLoader
 import pytorch_lightning as pl
 
 from tqdm.auto import tqdm
-from nlns.environments.batch_lns_env import BatchLNSEnvironment
 from nlns.instances import VRPInstance, VRPSolution, VRPNeuralSolution
 from nlns.operators import LNSProcedure, RepairProcedure, DestroyProcedure, LNSOperator
 from nlns.operators.initial import nearest_neighbor_solution
@@ -59,28 +58,36 @@ class NeuralProcedurePair:
                     "incumbent_solution": Mean score of solutions found by the neural operator
                     "time": Time taken to compute the solution
         """
-        target_cost = list()
-        incumbent_cost = list()
-        for batch_idx, batch in tqdm(enumerate(chunked(data, batch_size)),
-                                         desc="Validation batch",
-                                         leave=False,
-                                         total=len(data) // batch_size):
-            # work on copies
-            batch = [deepcopy(s) for s in batch]
+        start_time = time.time()
 
-            target_cost.extend((s.cost for s in batch))
+        validation_solutions = [
+            VRPNeuralSolution.from_solution(
+                nearest_neighbor_solution(instance)) for
+            instance in data]
+        costs = [solution.cost for solution in validation_solutions]
 
-            start_time = time.time()
-            with torch.no_grad():
-                self.destroy_procedure.multiple(batch)
-                self.repair_procedure.multiple(batch)
-            runtime = time.time() - start_time
+        # Assuming all the instances have the same number of customers
+        for _ in range(validation_solutions[0].instance.n_customers):
+            backup_copies = [deepcopy(sol) for sol in validation_solutions]
+            n_solutions = len(validation_solutions)
 
-            incumbent_cost.extend((sol.cost for sol in batch))
+            n_batches = ceil(n_solutions / batch_size)
+            for i in range(n_batches):
+                begin = i * batch_size
+                end = min((i + 1) * batch_size, n_solutions)
+                self.destroy_procedure(validation_solutions[begin:end])
+                self.repair_procedure(validation_solutions[begin:end])
 
-        return {"target_solution": np.mean(target_cost),
-                "incumbent_solution": np.mean(incumbent_cost),
-                "time": runtime }
+            for i in range(n_solutions):
+                cost = validation_solutions[i].cost
+                # Only "accept" improving solutions
+                if costs[i] < cost:
+                    validation_solutions[i] = backup_copies[i]
+                else:
+                    costs[i] = cost
+
+        return {"mean_cost": np.mean(costs),
+                "time": time.time() - start_time}
 
     def train(self,
               train: DataLoader,
@@ -119,19 +126,20 @@ class NeuralProcedurePair:
         if self.repair_is_neural:
             self.repair_procedure._init_train()
 
+        # Pregenerate initial solutions
+        initial_solutions = [
+            VRPNeuralSolution.from_solution(
+                nearest_neighbor_solution(inst))
+            for inst in train]
+
         for epoch in tqdm(range(epochs), desc="Training epoch"):
             for batch_idx, batch in tqdm(
-                enumerate(chunked(train, batch_size)),
+                enumerate(chunked(initial_solutions, batch_size)),
                 desc="Training batch",
                 leave=False,
-                    total=train.n_instances // batch_size):
-                batch = [
-                    VRPNeuralSolution.from_solution(
-                        nearest_neighbor_solution(inst))
-                    for inst in batch]
+                total=len(initial_solutions) // batch_size):
 
-                # work on copies
-                batch = [deepcopy(s) for s in batch]
+                # batch = [deepcopy(s) for s in batch]
                 batch_costs = [s.cost for s in batch]
                 mean_batch_cost = sum(batch_costs) / len(batch_costs)
 
@@ -146,7 +154,7 @@ class NeuralProcedurePair:
                 if self.destroy_is_neural:
                     pred, loss, info = self.destroy_procedure._train_step(batch)
                 else:
-                    self.destroy_procedure.multiple(batch)
+                    self.destroy_procedure(batch)
                     pred = batch
 
                 if self.repair_is_neural:
@@ -154,7 +162,7 @@ class NeuralProcedurePair:
                     # outputs a list of VRPSolution
                     self.repair_procedure._train_step(pred)
                 else:
-                    pred = self.repair_procedure.multiple(pred)
+                    pred = self.repair_procedure(pred)
 
                 repaired_costs = [p.cost for p in pred]
                 mean_repaired_cost = sum(repaired_costs) / len(repaired_costs)

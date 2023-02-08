@@ -17,7 +17,12 @@ class RLAgentRepair(NeuralProcedure, RepairProcedure):
         super(RLAgentRepair, self).__init__(actor, device, logger)
         self.critic = critic.to(device) if critic is not None else critic
 
-    def multiple(self, solutions: List[VRPNeuralSolution]):
+    def call(self, solutions: List[VRPNeuralSolution]):
+        """Completely repair the given solutions.
+
+        This method shall be used during training. For faster inference,
+        use :meth:`__call__`.
+        """
         emb_size = max([solution.min_nn_repr_size() for solution in solutions])
         batch_size = len(solutions)
 
@@ -41,8 +46,11 @@ class RLAgentRepair(NeuralProcedure, RepairProcedure):
         tour_idx, tour_logp = self._actor_model_forward(solutions, static_input, dynamic_input, capacity)
         return tour_idx, tour_logp, cost_estimate
 
-    def __call__(self, solution: VRPNeuralSolution):
-        self.multiple([solution])
+    def __call__(self, solutions: List[VRPNeuralSolution]):
+        with torch.no_grad():
+            self.call(solutions)
+
+        return solutions
 
     def _init_train(self):
         self.actor_optim = optim.Adam(self.model.parameters(), lr=1e-4)
@@ -57,7 +65,7 @@ class RLAgentRepair(NeuralProcedure, RepairProcedure):
     def _train_step(self, train_batch):
         # opposite_procedure.multiple(train_batch)
         costs_destroyed = [solution.cost for solution in train_batch]
-        _, tour_logp, critic_est = self.multiple(train_batch)
+        _, tour_logp, critic_est = self.call(train_batch)
         costs_repaired = [solution.cost for solution in train_batch]
 
         # Reward/Advantage computation
