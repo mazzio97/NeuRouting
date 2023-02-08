@@ -49,9 +49,16 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.n_instances = n_instances
         self.solve = solve
         self.save_path = save_path
-
+        
         if self.save_path is not None:
             assert os.path.exists(self.save_path), "Data path doesn't exists!"
+        else:
+            if os.path.exists(os.path.join(self.save_path, ".instances.txt")):
+                with open(os.path.join()) as f:
+                    self.saved_solutions = f.readlines()
+            else:
+                self.saved_solutions = list()
+
 
     def _sample_nodes(self) -> int:
         """
@@ -95,23 +102,29 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
                 tours = read_solution(f"{fname}.sol", nodes)
                 yield VRPSolution(instance, [Route(t, instance) for t in tours])
 
-        for _ in range(to_generate):
-            nodes = self._sample_nodes()
-            elem = self.generate_instance(nodes)
+        try:
+            saved_solutions_file = open(os.path.join(self.save_path, ".instances.txt"), "a")
 
-            if self.solve:
-                elem = self.lkh.solve(elem, runs=self.lkh_runs)
+            for _ in range(to_generate):
+                nodes = self._sample_nodes()
+                elem = self.generate_instance(nodes)
 
-            if self.save_path is not None:
-                fname = f"{nodes}_{uuid4()}"
                 if self.solve:
-                    write_vrp(elem.instance, os.path.join(self.save_path, f"{fname}.vrp"))
-                    write_solution(elem, os.path.join(self.save_path, f"{fname}.sol"))
-                else:
-                    write_vrp(elem, os.path.join(self.save_path, f"{fname}.vrp"))
+                    elem = self.lkh.solve(elem, runs=self.lkh_runs)
 
-            yield elem
+                if self.save_path is not None:
+                    fname = f"{nodes}_{uuid4()}"
+                    if self.solve:
+                        write_vrp(elem.instance, os.path.join(self.save_path, f"{fname}.vrp"))
+                        write_solution(elem, os.path.join(self.save_path, f"{fname}.sol"))
+                    else:
+                        write_vrp(elem, os.path.join(self.save_path, f"{fname}.vrp"))
+                    
+                    saved_solutions_file.write(fname + "\n")
 
+                yield elem
+        finally:
+            saved_solutions_file.close()
 
 class NazariDataset(IterableVRPDataset):
     """
