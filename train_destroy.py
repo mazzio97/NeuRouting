@@ -21,20 +21,14 @@ parser = argparse.ArgumentParser(description='Train neural destroy operator')
 parser.add_argument('-o', '--out', type=str, required=True)
 parser.add_argument('-n', '--n_customers', type=n_customers, required=True)
 parser.add_argument('-v', '--valid', type=int, required=True)
-parser.add_argument('-b', '--batch-size', type=int, required=False, default=20)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--distribution', type=str, required=False, default="nazari")
-parser.add_argument('--log-interval', type=int, required=False, default=10)
-parser.add_argument('--valid-interval', type=int, required=False, default=50)
+parser.add_argument('--log-interval', type=int, required=False, default=100)
 parser.add_argument('--num-neighbors', type=int, required=False, default=20)
 parser.add_argument('--steps-per-epoch', type=int, required=False, default=500)
 parser.add_argument('--max-epochs', type=int, required=False, default=1500)
 parser.add_argument('--initial-lr', type=float, required=False, default=0.001)
-parser.add_argument('--lr-decay-patience', type=int, required=False, default=1)
-parser.add_argument('--early-stop-patience', type=int, required=False, default=10)
-parser.add_argument('--early-stop-f', type=float, required=False, default=0.3)
 parser.add_argument('--wandb-name', type=str, required=False, default=None)
-parser.add_argument('--balanced-training', type=bool, required=False, default=True)
 parser.add_argument('--save', type=str, required=False, default=None)
 
 args = parser.parse_args()
@@ -45,15 +39,11 @@ if __name__ == "__main__":
   data = DataModule(num_nodes=args.n_customers,
                     valid_instances=args.valid,
                     steps_per_epoch=args.steps_per_epoch,
-                    batch_size=args.batch_size,
                     num_neighbors=args.num_neighbors,
                     save_path=args.save)
   
   destroy = ResGatedGCN(num_neighbors=args.num_neighbors, 
-                        steps_per_epoch=args.steps_per_epoch,
-                        initial_learning_rate=args.initial_lr,
-                        learning_rate_decay_patience=args.lr_decay_patience,
-                        compute_weights=args.balanced_training)
+                        initial_learning_rate=args.initial_lr)
   wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=args.wandb_name)
  
   trainer = pl.Trainer(max_epochs=args.max_epochs,
@@ -61,17 +51,13 @@ if __name__ == "__main__":
                        accelerator="auto",
                        logger=wandb_logger,
                        log_every_n_steps=args.log_interval,
-                       val_check_interval=args.valid_interval,
+                       check_val_every_n_epoch=5,
+                       auto_scale_batch_size="binsearch",
                        callbacks=[
                          pl.callbacks.LearningRateMonitor(logging_interval="epoch"),
                          pl.callbacks.ModelCheckpoint(save_top_k=1, monitor="valid/loss", mode="min", 
                                                       dirpath=args.out, filename="destroy-{epoch}",
-                                                      every_n_epochs=1),
-                         pl.callbacks.EarlyStopping(monitor="valid/loss", 
-                                                    patience=args.early_stop_patience,
-                                                    val_check_interval=args.early_stop_f,
-                                                    mode="min",
-                                                    check_on_train_epoch_end=False)
+                                                      every_n_epochs=5)
                        ])
-  
+
   trainer.fit(destroy, datamodule=data)

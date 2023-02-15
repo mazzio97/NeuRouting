@@ -81,12 +81,13 @@ class DataModule(pl.LightningDataModule):
                num_nodes: Union[int, Tuple[int, int]],
                valid_instances: int = 10_000,
                generator: str = "nazari",
-               generator_params: Dict = { "solve": True, "lkh_runs": 1, "lkh_pass": 3 },
+               generator_params: Dict = { "solve": True, "lkh_runs": 1 },
                num_neighbors: int = 20,
                batch_size: int = 32,
                steps_per_epoch: int = 500,
                save_path: Union[None, str] = None):
     super().__init__()
+    self.save_hyperparameters()
     self.num_nodes = num_nodes
     self.num_neighbors = num_neighbors
     self.batch_size = batch_size
@@ -127,7 +128,7 @@ class DataModule(pl.LightningDataModule):
     workers = os.cpu_count()
 
     return DataLoader(self.train_dataset, 
-                      batch_size=self.batch_size, 
+                      batch_size=self.batch_size | self.hparams.batch_size,
                       collate_fn=partial(collate_fn, num_neighbors=self.num_neighbors),
                       num_workers=workers,
                       persistent_workers=True,
@@ -135,6 +136,6 @@ class DataModule(pl.LightningDataModule):
 
   def val_dataloader(self):
     return DataLoader(self.valid_dataset,
-                      batch_size=self.batch_size, 
+                      batch_size=self.batch_size | self.hparams.batch_size,
                       collate_fn=partial(collate_fn, num_neighbors=self.num_neighbors),
                       num_workers=os.cpu_count())
