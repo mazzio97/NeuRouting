@@ -4,7 +4,7 @@ import queue
 import torch
 from torch_geometric.data import Data
 import numpy as np
-from itertools import chain, repeat
+from itertools import chain, repeat, islice
 from more_itertools import chunked
 import math
 from uuid import uuid4
@@ -49,16 +49,23 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         self.n_instances = n_instances
         self.solve = solve
         self.save_path = save_path
-        
+               
         if self.save_path is not None:
             assert os.path.exists(self.save_path), "Data path doesn't exists!"
-        else:
-            if os.path.exists(os.path.join(self.save_path, ".instances.txt")):
-                with open(os.path.join()) as f:
-                    self.saved_solutions = f.readlines()
+            instances_file = os.path.join(self.save_path, ".instances.txt")
+            if os.path.exists(instances_file):
+                with open(os.path.join(instances_file)) as f:
+                    self.saved_solutions = f.readlines()            
             else:
                 self.saved_solutions = list()
+            
 
+    def __len__(self) -> int:
+        """
+        Returns:
+            int: Number of instances to generate
+        """
+        return self.n_instances
 
     def _sample_nodes(self) -> int:
         """
@@ -88,18 +95,29 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
             Iterable[Union[VRPInstance, VRPSolution]]: Generated instance in torch geometric format.
         """
         worker_info = torch.utils.data.get_worker_info()
-        to_generate = self.n_instances if worker_info is None \
-                      else int(math.ceil(self.n_instances / float(worker_info.num_workers)))
+        
+        if worker_info is None:
+            to_generate = self.n_instances
+            saved_per_worker = len(self.saved_solutions)
+            saved_start_i = 0
+        else:
+            to_generate = int(math.ceil(self.n_instances / float(worker_info.num_workers)))
+            saved_per_worker = int(math.ceil(len(self.saved_solutions) / float(worker_info.num_workers)))
+            saved_start_i = worker_info.id * saved_per_worker
+        saved_slice = islice(self.saved_solutions, saved_start_i, saved_start_i * saved_per_worker)
 
         # use saved ones before generating new ones
         if self.save_path is not None:
-            saved_solutions = glob(os.path.join(self.save_path, "*.sol"))
-            to_generate -= len(saved_solutions)
-            for saved_solution in saved_solutions:
-                fname = saved_solution.split(".sol")[0]
+            to_generate -= saved_per_worker
+
+            for saved_solution in saved_slice:
+                fname = saved_solution.split(".sol")[0].strip()
                 nodes = int(fname.split("/")[-1].split("_")[0])
-                instance = read_vrp(f"{fname}.vrp")
-                tours = read_solution(f"{fname}.sol", nodes)
+                vrp_file = os.path.join(self.save_path, f"{fname}.vrp")
+                sol_file = os.path.join(self.save_path, f"{fname}.sol")
+                
+                instance = read_vrp(vrp_file)
+                tours = read_solution(sol_file, nodes)
                 yield VRPSolution(instance, [Route(t, instance) for t in tours])
 
         try:

@@ -113,7 +113,7 @@ class DataModule(pl.LightningDataModule):
     Compute fixed valid and test dataset.
     """
     self.train_dataset = self.generator_cls(
-      self.steps_per_epoch * self.batch_size,
+      self.steps_per_epoch // self.batch_size,
       self.num_nodes, 
       save_path = os.path.join(self.save_path, "train") if self.save_path != None else None,
       **self.generator_params)
