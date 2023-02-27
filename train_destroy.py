@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(description='Train neural destroy operator')
 parser.add_argument('-o', '--out', type=str, required=True)
 parser.add_argument('-n', '--n_customers', type=n_customers, required=True)
 parser.add_argument('-v', '--valid', type=int, required=True)
+parser.add_argument('-t', '--train', type=int, required=True)
 parser.add_argument('-b', '--batch-size', type=int, required=False, default=16)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--distribution', type=str, required=False, default="nazari")
@@ -38,8 +39,8 @@ if __name__ == "__main__":
   # following Joshi (2019) and Kool (2022) we train for at most 1500
   # epochs with 500 steps for each epoch.
   data = DataModule(num_nodes=args.n_customers,
+                    train_instances=args.train,
                     valid_instances=args.valid,
-                    steps_per_epoch=args.steps_per_epoch,
                     num_neighbors=args.num_neighbors,
                     batch_size=args.batch_size,
                     save_path=args.save)

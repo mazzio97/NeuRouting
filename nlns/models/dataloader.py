@@ -79,18 +79,19 @@ def collate_fn(samples: List[VRPSolution], num_neighbors: int = 20) -> Batch:
 class DataModule(pl.LightningDataModule):
   def __init__(self, 
                num_nodes: Union[int, Tuple[int, int]],
+               train_instances: int = 1_000_000,
                valid_instances: int = 10_000,
                generator: str = "nazari",
                generator_params: Dict = { "solve": True, "lkh_runs": 1 },
                num_neighbors: int = 20,
                batch_size: int = 32,
-               steps_per_epoch: int = 500,
                save_path: Union[None, str] = None):
     super().__init__()
     self.save_hyperparameters()
     self.num_nodes = num_nodes
     self.num_neighbors = num_neighbors
     self.batch_size = batch_size
+    self.train_instances = train_instances
     self.valid_instances = valid_instances
     self.steps_per_epoch = steps_per_epoch
     
@@ -113,7 +114,7 @@ class DataModule(pl.LightningDataModule):
     Compute fixed valid and test dataset.
     """
     self.train_dataset = self.generator_cls(
-      self.steps_per_epoch // self.batch_size,
+      self.train_instances,
       self.num_nodes, 
       save_path = os.path.join(self.save_path, "train") if self.save_path != None else None,
       **self.generator_params)
