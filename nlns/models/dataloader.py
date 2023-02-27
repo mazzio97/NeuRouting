@@ -93,7 +93,6 @@ class DataModule(pl.LightningDataModule):
     self.batch_size = batch_size
     self.train_instances = train_instances
     self.valid_instances = valid_instances
-    self.steps_per_epoch = steps_per_epoch
     
     self.save_path = save_path
     if self.save_path != None:

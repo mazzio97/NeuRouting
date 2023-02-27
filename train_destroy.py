@@ -21,7 +21,6 @@ parser = argparse.ArgumentParser(description='Train neural destroy operator')
 parser.add_argument('-o', '--out', type=str, required=True)
 parser.add_argument('-n', '--n_customers', type=n_customers, required=True)
 parser.add_argument('-v', '--valid', type=int, required=True)
-parser.add_argument('-t', '--train', type=int, required=True)
 parser.add_argument('-b', '--batch-size', type=int, required=False, default=16)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--distribution', type=str, required=False, default="nazari")
@@ -39,7 +38,7 @@ if __name__ == "__main__":
   # following Joshi (2019) and Kool (2022) we train for at most 1500
   # epochs with 500 steps for each epoch.
   data = DataModule(num_nodes=args.n_customers,
-                    train_instances=args.train,
+                    train_instances=1_000_000,
                     valid_instances=args.valid,
                     num_neighbors=args.num_neighbors,
                     batch_size=args.batch_size,
@@ -54,12 +53,15 @@ if __name__ == "__main__":
                        accelerator="auto",
                        logger=wandb_logger,
                        log_every_n_steps=args.log_interval,
-                       check_val_every_n_epoch=5,
+                       check_val_every_n_epoch=None,
+                       val_check_interval=args.steps_per_epoch,
                        callbacks=[
-                         pl.callbacks.LearningRateMonitor(logging_interval="epoch"),
-                         pl.callbacks.ModelCheckpoint(save_top_k=1, monitor="valid/loss", mode="min", 
-                                                      dirpath=args.out, filename="destroy-{epoch}",
-                                                      every_n_epochs=5)
+                          pl.callbacks.LearningRateMonitor(logging_interval="epoch"),
+                          pl.callbacks.ModelCheckpoint(save_top_k=1, monitor="valid/loss", mode="min", 
+                                                       dirpath=args.out, filename="destroy-{epoch}",
+                                                       every_n_train_steps=args.steps_per_epoch * 5),
+                          pl.callbacks.EarlyStopping(monitor="valid/loss", min_delta=0.00, 
+                                                     mode="min", strict=False, patience=10)
                        ])
 
   trainer.fit(destroy, datamodule=data)
