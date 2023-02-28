@@ -48,7 +48,9 @@ if __name__ == "__main__":
                         initial_learning_rate=args.initial_lr)
   wandb_logger = pl.loggers.WandbLogger(project="NeuRouting", name=args.wandb_name)
  
-  trainer = pl.Trainer(max_epochs=args.max_epochs,
+  print(args.steps_per_epoch)
+  trainer = pl.Trainer(max_epochs=-1,
+                       max_steps=args.steps_per_epoch * args.max_epochs,
                        devices=1,
                        accelerator="auto",
                        logger=wandb_logger,
@@ -56,7 +58,7 @@ if __name__ == "__main__":
                        check_val_every_n_epoch=None,
                        val_check_interval=args.steps_per_epoch,
                        callbacks=[
-                          pl.callbacks.LearningRateMonitor(logging_interval="epoch"),
+                          pl.callbacks.LearningRateMonitor(logging_interval="step"),
                           pl.callbacks.ModelCheckpoint(save_top_k=1, monitor="valid/loss", mode="min", 
                                                        dirpath=args.out, filename="destroy-{epoch}",
                                                        every_n_train_steps=args.steps_per_epoch * 5),

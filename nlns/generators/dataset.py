@@ -55,17 +55,9 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
             instances_file = os.path.join(self.save_path, ".instances.txt")
             if os.path.exists(instances_file):
                 with open(os.path.join(instances_file)) as f:
-                    self.saved_solutions = f.readlines()            
+                    self.saved_solutions = f.readlines()      
             else:
                 self.saved_solutions = list()
-            
-
-    def __len__(self) -> int:
-        """
-        Returns:
-            int: Number of instances to generate
-        """
-        return self.n_instances
 
     def _sample_nodes(self) -> int:
         """
