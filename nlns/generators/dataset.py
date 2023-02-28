@@ -91,12 +91,12 @@ class IterableVRPDataset(torch.utils.data.IterableDataset):
         if worker_info is None:
             to_generate = self.n_instances
             saved_per_worker = len(self.saved_solutions)
-            saved_start_i = 0
+            saved_start_i = 1
         else:
             to_generate = int(math.ceil(self.n_instances / float(worker_info.num_workers)))
             saved_per_worker = int(math.ceil(len(self.saved_solutions) / float(worker_info.num_workers)))
             saved_start_i = worker_info.id * saved_per_worker
-        saved_slice = islice(self.saved_solutions, saved_start_i, saved_start_i * saved_per_worker)
+        saved_slice = islice(self.saved_solutions, saved_start_i, (saved_start_i * saved_per_worker) + saved_per_worker)
 
         # use saved ones before generating new ones
         if self.save_path is not None:
