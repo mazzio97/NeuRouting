@@ -2,7 +2,12 @@ import numpy as np
 
 from nlns.instances import VRPInstance
 
-def generate_nazari_instances(x, y): pass
+
+def generate_nazari_instances(instances: int, n_customers: int):
+    """Sample from :func:`generate_nazari_instance` multiple times."""
+    return tuple(generate_nazari_instance(n_customers)
+                 for _ in range(instances))
+
 
 def generate_nazari_instance(n_customers: int) -> VRPInstance:
     """

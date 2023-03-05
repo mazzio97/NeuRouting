@@ -28,12 +28,11 @@ def generate_multiple_instances(n_instances: int,
     assert distribution in ['nazari', 'uchoa'], f"{distribution} is unknown."
     instance_generator = generate_nazari_instances if distribution == 'nazari' \
                          else generate_uchoa_instances
-    
+
     # https://stackoverflow.com/questions/48918627/split-an-integer-into-bins
-    instances_per_customer = np.arange(n_instances + len(n_customers) - 1, 
+    instances_per_customer = np.arange(n_instances + len(n_customers) - 1,
                                        n_instances - 1, -1) // len(n_customers)
-    
+
     return list(chain(*[instance_generator(i, c) for i, c in zip(instances_per_customer, n_customers)]))
 
 
-    

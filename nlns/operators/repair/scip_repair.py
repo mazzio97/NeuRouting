@@ -6,9 +6,9 @@ from typing import List
 import matplotlib.pyplot as plt
 from pyscipopt import Model
 
-from nlns.instances.vrp_solution import VRPSolution
-from nlns.instances.vrp_model_scip import VRPModelSCIP
+from nlns.instances.vrp_solution import VRPInstance, VRPSolution
 from nlns.operators import RepairProcedure
+from nlns.baselines.scip_solver import VRPModelSCIP
 
 
 class SCIPRepair(RepairProcedure):
