@@ -1,11 +1,15 @@
 import re
 
 from matplotlib import pyplot as plt
-from pyscipopt import Model, quicksum
 
+import nlns
 import nlns.generators as generators
 # from nlns.environments import VRPSolver
 from nlns.instances import VRPInstance, VRPSolution
+
+# Optional dependencies come later for practical reasons
+nlns.module_found('pyscipopt', __name__)
+from pyscipopt import Model, quicksum                       # NOQA
 
 
 class VRPModelSCIP(Model):

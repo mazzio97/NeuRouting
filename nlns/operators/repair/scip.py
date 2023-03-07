@@ -4,11 +4,15 @@ from multiprocessing import Pool
 from typing import List
 
 import matplotlib.pyplot as plt
-from pyscipopt import Model
 
+import nlns
 from nlns.instances.vrp_solution import VRPInstance, VRPSolution
 from nlns.operators import RepairProcedure
-from nlns.baselines.scip_solver import VRPModelSCIP
+
+# Optional dependencies come later for practical reasons
+nlns.module_found('pyscipopt', __name__)
+from pyscipopt import Model                                 # NOQA
+from nlns.baselines.scip_solver import VRPModelSCIP         # NOQA
 
 
 class SCIPRepair(RepairProcedure):
