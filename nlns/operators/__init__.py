@@ -1,41 +1,58 @@
 from abc import abstractmethod, ABC
-from typing import List
+from typing import Sequence
 
+import nlns
 from nlns.instances import VRPSolution
 
 
-class LNSProcedure(ABC):
-    @abstractmethod
-    def __call__(self, solution: VRPSolution):
-        pass
+class LNSOperator(ABC):
+    """Base class for large neighborhood search operators.
 
-    def multiple(self, solutions: List[VRPSolution]):
-        return [self(sol) for sol in solutions]
+    Can be used with :class:`nlns.search.BaseLargeNeighborhoodSearch`
+    subclasses (e.g. :class:`nlns.search.LNS`).
 
+    The interface is the same for both destroy and repair operators.
+    Minimal usage requires to implement :meth:`__call__` (see docs of
+    the method for more info).
 
-class DestroyProcedure(LNSProcedure):
-    def __init__(self, percentage: float):
-        """
-        Initialize the destroy procedure with the specified dedtroy percentage.
+    When designing an operator, special care should go towards the
+    capability of providing reproducible results. By default, the
+    :attr:`rng` attribute provides a randomly initialized state which
+    can be easily managed via :meth:`set_random_state`. When interacting
+    with third party libraries, a custom implementation may be needed
+    (see :meth:`set_random_state` for more).
+    """
+    rng = nlns.default_rng
+
+    def set_random_state(self, seed: nlns.RandomSeedOrState):
+        """Set internal random state for reproducible results.
+
+        Default implementation retrieves a ``random.Random`` object
+        through :func:`nlns.get_rng` and sets it to :attr:`rng`.
+
+        Override to provide custom state generation (e.g. for third
+        party libraries). The developer is responsible for using
+        such state (both the provided and custom ones) at inference
+        time.
 
         Args:
-            percentage (float): Destroy percentage.
+            seed: Random seed or state (see :func:`nlns.get_rng`).
         """
-        assert 0 <= percentage <= 1
-        self.percentage = percentage
+        self.rng = nlns.get_rng(seed)
 
     @abstractmethod
-    def __call__(self, solutions: List[VRPSolution]):
-        pass
+    def __call__(self,
+                 solutions: Sequence[VRPSolution]) -> Sequence[VRPSolution]:
+        """Abstract: repair or destroy sequence of solutions.
 
+        Override to provide custom implementation of a destroy or repair
+        operator.
 
-class RepairProcedure(LNSProcedure):
-    @abstractmethod
-    def __call__(self, solutions: VRPSolution):
-        pass
-
-
-class LNSOperator:
-    def __init__(self, destroy_procedure: DestroyProcedure, repair_procedure: RepairProcedure):
-        self.destroy = destroy_procedure
-        self.repair = repair_procedure
+        Args:
+            solutions: A copy of the solutions to apply the operator on.
+                As copies, they can be modified in place by the
+                operator.
+        Returns:
+            Repaired or destroyed solutions, following the indexing of
+                the input ones.
+        """
