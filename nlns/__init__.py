@@ -1,4 +1,9 @@
 import importlib
+import random
+from typing import Union, Tuple
+
+default_rng = random.Random()
+RandomSeedOrState = Union[None, int, float, str, bytes, bytearray, Tuple]
 
 
 def module_found(module_name: str, current_module_name: str,
@@ -35,3 +40,29 @@ def module_found(module_name: str, current_module_name: str,
             f'Module/package named "{module_name}" '
             f'could not be found. {current_module_name} module '
             'requires it to work. Consider installing it.')
+
+
+def get_rng(seed: RandomSeedOrState = None) -> random.Random:
+    """Generate a random number generator based on input state.
+
+    Args:
+        seed: A seed of type ``int``, ``float``, ``str``,
+            ``bytes`` or ``bytearray``, or a random state (a ``Tuple``
+            obtained via ``random.getstate()`` or similar).
+            In the latter case, a generator is created and its
+            state is set to the given one.
+            If not provided (``None`` value), the default random
+            generator is returned (:attr:`default_rng`).
+    """
+    if seed is None:
+        return default_rng
+
+    new_rng = random.Random()
+
+    # Simple heuristic for random states
+    if type(seed) is tuple and len(seed) == 3:
+        new_rng.setstate(seed)
+        return new_rng
+
+    new_rng.seed(seed)
+    return new_rng
