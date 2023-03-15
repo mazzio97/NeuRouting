@@ -3,10 +3,27 @@ from operator import attrgetter
 
 import pytest
 
+from helpers import (set_default_rng, empty_solutions, skipif_module,   # NOQA
+                     MissingPlaceholder)
 from context import nlns
 from nlns.operators import LNSOperator
 from nlns.operators.repair import GreedyRepair
-from helpers import set_default_rng, empty_solutions        # NOQA
+try:
+    from nlns.operators.repair.scip import SCIPRepair
+except ModuleNotFoundError:
+    SCIPRepair = MissingPlaceholder('SCIPRepair')
+
+repair_operators = [
+            (GreedyRepair, 42),
+            pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt')])
+        ]
+
+# Necessary as long as we have the reproducibility bug on SCIPRepair
+repair_operators_reproducibility = [
+            (GreedyRepair, 42),
+            pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt'),
+                                                pytest.mark.xfail])
+        ]
 
 
 class IdentityOperator(LNSOperator):
@@ -32,9 +49,14 @@ class TestLNSOperator:
         assert identity_operator.rng.getstate() != nlns.default_rng.getstate()
 
 
+def param_repair(params=repair_operators):
+    return pytest.mark.parametrize('operator_type, seed',
+                                   params)
+
+
 class TestRepair:
 
-    @pytest.mark.parametrize('operator_type, seed', [(GreedyRepair, 42)])
+    @param_repair()
     def test_repair(self, operator_type, seed, empty_solutions):        # NOQA
         operator = operator_type()
 
@@ -43,7 +65,7 @@ class TestRepair:
 
         assert all(not solution.missing_customers() for solution in solutions)
 
-    @pytest.mark.parametrize('operator_type, seed', [(GreedyRepair, 42)])
+    @param_repair(repair_operators_reproducibility)
     def test_reproducibility(self, operator_type, seed,
                              empty_solutions):                  # NOQA
         operator = operator_type()

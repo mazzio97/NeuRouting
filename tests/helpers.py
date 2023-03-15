@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 from context import nlns
@@ -19,3 +21,23 @@ def empty_solutions(request):
 
     return tuple(map(VRPSolution,
                      generate_multiple_instances(50, request.param)))
+
+
+def skipif_module(required_module_name):
+    """Mark to skip if the given module name cannot be imported."""
+    found = True
+    try:
+        importlib.import_module(required_module_name)
+    except (ModuleNotFoundError, ImportError):
+        found = False
+
+    return pytest.mark.skipif(
+        not found,
+        reason=f'Could not import module {required_module_name}')
+
+
+class MissingPlaceholder:
+    """Use as placeholder for missing imports (instead of None)."""
+
+    def __init__(self, name: str):
+        self.__name__ = name
