@@ -5,6 +5,7 @@ import pytest
 from context import nlns
 from nlns.generators import generate_multiple_instances
 from nlns.instances import VRPSolution
+from nlns.operators.initial import nearest_neighbor_solution
 
 
 @pytest.fixture
@@ -20,6 +21,14 @@ def empty_solutions(request):
     # TODO: Handle seeds in generate_multiple_instances
 
     return tuple(map(VRPSolution,
+                     generate_multiple_instances(50, request.param)))
+
+
+@pytest.fixture(params=[20, 50, 100])
+def complete_solutions(request):
+    # TODO: Handle seeds in generate_multiple_instances
+
+    return tuple(map(nearest_neighbor_solution,
                      generate_multiple_instances(50, request.param)))
 
 

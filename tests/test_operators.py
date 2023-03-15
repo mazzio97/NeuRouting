@@ -4,7 +4,7 @@ from operator import attrgetter
 import pytest
 
 from helpers import (set_default_rng, empty_solutions, skipif_module,   # NOQA
-                     MissingPlaceholder)
+                     MissingPlaceholder, complete_solutions)
 from context import nlns
 from nlns.operators import LNSOperator
 from nlns.operators.repair import GreedyRepair
@@ -12,6 +12,7 @@ try:
     from nlns.operators.repair.scip import SCIPRepair
 except ModuleNotFoundError:
     SCIPRepair = MissingPlaceholder('SCIPRepair')
+from nlns.operators.destroy import PointDestroy
 
 repair_operators = [
             (GreedyRepair, 42),
@@ -23,6 +24,10 @@ repair_operators_reproducibility = [
             (GreedyRepair, 42),
             pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt'),
                                                 pytest.mark.xfail])
+        ]
+
+destroy_operators = [
+            (PointDestroy, 42)
         ]
 
 
@@ -54,6 +59,11 @@ def param_repair(params=repair_operators):
                                    params)
 
 
+def param_destroy(params=destroy_operators):
+    return lambda cls: pytest.mark.parametrize('operator_type, seed', params)(
+        pytest.mark.parametrize('percentage', [0.2, 0.5, 0.7, 1])(cls))
+
+
 class TestRepair:
 
     @param_repair()
@@ -77,6 +87,37 @@ class TestRepair:
 
         operator.set_random_state(seed)
         solutions_copy = operator(empty_copy)
+
+        costs = list(map(attrgetter('cost'), solutions))
+        costs_copy = list(map(attrgetter('cost'), solutions_copy))
+
+        assert costs == costs_copy
+
+
+class TestDestroy:
+
+    @param_destroy()
+    def test_destroy(self, operator_type, seed, percentage,
+                     complete_solutions):                   # NOQA
+        operator = operator_type(percentage)
+
+        operator.set_random_state(seed)
+        solutions = operator(complete_solutions)
+
+        assert all(solution.missing_customers() for solution in solutions)
+
+    @param_destroy()
+    def test_reproducibility(self, operator_type, seed, percentage,
+                             complete_solutions,):           # NOQA
+        operator = operator_type(percentage)
+
+        complete_copy = copy.deepcopy(complete_solutions)
+
+        operator.set_random_state(seed)
+        solutions = operator(complete_solutions)
+
+        operator.set_random_state(seed)
+        solutions_copy = operator(complete_copy)
 
         costs = list(map(attrgetter('cost'), solutions))
         costs_copy = list(map(attrgetter('cost'), solutions_copy))
