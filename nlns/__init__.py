@@ -2,6 +2,8 @@ import importlib
 import random
 from typing import Union, Tuple
 
+import numpy as np
+
 default_rng = random.Random()
 RandomSeedOrState = Union[None, int, float, str, bytes, bytearray, Tuple]
 
@@ -66,3 +68,19 @@ def get_rng(seed: RandomSeedOrState = None) -> random.Random:
 
     new_rng.seed(seed)
     return new_rng
+
+
+def numpy_generator_from_rng(rng: random.Random) -> np.random.Generator:
+    """Build a numpy rng from a ``random.Random`` one.
+
+    Input generator is not consumed, meaning that multiple calls with
+    the same (untouched) input will result in the same numpy generator
+    state.
+
+    Args:
+        rng: A Python standard random generator.
+
+    Returns:
+        A numpy generator built from the state of input generator.
+    """
+    return np.random.default_rng(rng.getstate()[1])

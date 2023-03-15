@@ -30,3 +30,10 @@ def test_get_rng(seed, set_default_rng):                    # NOQA
 
 def test_get_rng_none(set_default_rng):                     # NOQA
     assert nlns.get_rng() is nlns.default_rng
+
+
+def test_numpy_generator_from_rng(set_default_rng):         # NOQA
+    sample1 = nlns.numpy_generator_from_rng(nlns.default_rng).random()
+    sample2 = nlns.numpy_generator_from_rng(nlns.default_rng).random()
+
+    assert sample1 == sample2
