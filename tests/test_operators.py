@@ -12,7 +12,7 @@ try:
     from nlns.operators.repair.scip import SCIPRepair
 except ModuleNotFoundError:
     SCIPRepair = MissingPlaceholder('SCIPRepair')
-from nlns.operators.destroy import PointDestroy, RandomDestroy
+from nlns.operators.destroy import PointDestroy, RandomDestroy, TourDestroy
 
 repair_operators = [
             (GreedyRepair, 42),
@@ -28,7 +28,8 @@ repair_operators_reproducibility = [
 
 destroy_operators = [
             (PointDestroy, 42),
-            (RandomDestroy, 42)
+            (RandomDestroy, 42),
+            (TourDestroy, 42)
         ]
 
 
