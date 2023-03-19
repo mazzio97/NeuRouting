@@ -1,4 +1,4 @@
-from typing import List
+from typing import Sequence
 
 import torch
 import numpy as np
@@ -6,18 +6,21 @@ import numpy as np
 import torch.nn.functional as F
 from torch import optim
 
-from nlns.operators import RepairProcedure
-from nlns.operators.neural import NeuralProcedure
-from nlns.instances.vrp_neural_solution import VRPNeuralSolution
+from nlns.operators import LNSOperator
+from nlns.instances import VRPSolution, VRPNeuralSolution
 from nlns.models import VRPActorModel, VRPCriticModel
 
 
-class RLAgentRepair(NeuralProcedure, RepairProcedure):
+class RLAgentRepair(LNSOperator):
     def __init__(self, actor: VRPActorModel, critic: VRPCriticModel = None, device='cpu', logger=None):
-        super(RLAgentRepair, self).__init__(actor, device, logger)
+        self.model = actor.to(device)
         self.critic = critic.to(device) if critic is not None else critic
+        self.device = device
+        self.logger = logger
+        # self.val_env = None
+        # self._val_phase = False
 
-    def call(self, solutions: List[VRPNeuralSolution]):
+    def call(self, solutions: Sequence[VRPNeuralSolution]):
         """Completely repair the given solutions.
 
         This method shall be used during training. For faster inference,
@@ -46,9 +49,15 @@ class RLAgentRepair(NeuralProcedure, RepairProcedure):
         tour_idx, tour_logp = self._actor_model_forward(solutions, static_input, dynamic_input, capacity)
         return tour_idx, tour_logp, cost_estimate
 
-    def __call__(self, solutions: List[VRPNeuralSolution]):
+    def __call__(self, solutions: Sequence[VRPSolution]
+                 ) -> Sequence[VRPSolution]:
+        neural_solutions = [VRPNeuralSolution.from_solution(solution)
+                            for solution in solutions]
         with torch.no_grad():
-            self.call(solutions)
+            self.call(neural_solutions)
+
+        for solution, neural in zip(solutions, neural_solutions):
+            solution.routes = neural.routes
 
         return solutions
 

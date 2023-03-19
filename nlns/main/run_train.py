@@ -5,11 +5,12 @@ import numpy as np
 
 from nlns.utils.logging import MultipleLogger, ConsoleLogger, WandBLogger
 from nlns.operators.neural import NeuralProcedurePair
-from nlns.operators.destroy import PointDestroy, TourDestroy, HeatmapDestroy, RandomDestroy
-from nlns.operators.repair import SCIPRepair, GreedyRepair
+from nlns.operators.destroy import PointDestroy, TourDestroy, RandomDestroy
+from nlns.operators.repair import GreedyRepair
 from nlns.operators.repair.rl_agent_repair import RLAgentRepair
 from nlns.models import VRPActorModel, VRPCriticModel
 from nlns.generators.dataset import NazariDataset
+from nlns.generators.nazari_generator import generate_nazari_instance
 
 
 def main(args: argparse.Namespace):
@@ -25,12 +26,12 @@ def main(args: argparse.Namespace):
         "point": lambda: PointDestroy(args.destroy_percentage),
         "tour": lambda: TourDestroy(args.destroy_percentage),
         "random": lambda: RandomDestroy(args.destroy_percentage),
-        "neural": lambda: HeatmapDestroy(args.destroy_percentage, model_config={"device": device})
+        # "neural": lambda: HeatmapDestroy(args.destroy_percentage, model_config={"device": device})
     }
     destroy_operator = destroy_operator_map[args.destroy]()
 
     repair_operator_map = {
-        "scip": lambda: SCIPRepair(),
+        # "scip": lambda: SCIPRepair(),
         "greedy": lambda: GreedyRepair(),
         "neural": lambda: RLAgentRepair(
             VRPActorModel(device=device), VRPCriticModel(), device=device,
@@ -38,9 +39,13 @@ def main(args: argparse.Namespace):
     }
     repair_operator = repair_operator_map[args.repair]()
 
-    dataset = NazariDataset(args.train_samples, args.n_customers)
+    # dataset = NazariDataset(args.train_samples, args.n_customers)
     # validation dataset is consolidated into a list to always use the same set
-    validation = list(NazariDataset(args.val_samples, args.n_customers))
+    # validation = list(NazariDataset(args.val_samples, args.n_customers))
+    dataset = [generate_nazari_instance(args.n_customers)
+               for _ in range(args.train_samples)]
+    validation = [generate_nazari_instance(args.n_customers)
+                  for _ in range(args.val_samples)]
 
     npp = NeuralProcedurePair(destroy_operator, repair_operator)
     npp.train(dataset,

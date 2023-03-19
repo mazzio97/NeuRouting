@@ -14,18 +14,18 @@ import pytorch_lightning as pl
 
 from tqdm.auto import tqdm
 from nlns.instances import VRPInstance, VRPSolution, VRPNeuralSolution
-from nlns.operators import LNSProcedure, RepairProcedure, DestroyProcedure, LNSOperator
+from nlns.operators import LNSOperator
 from nlns.operators.initial import nearest_neighbor_solution
 from nlns.utils.logging import Logger, EmptyLogger
 
 
-class NeuralProcedure(LNSProcedure):
-    def __init__(self, model: nn.Module, device: str = "cpu", logger: Optional[Logger] = None):
-        self.model = model.to(device)
-        self.device = device
-        self.logger = logger
-        self.val_env = None
-        self._val_phase = False
+# class NeuralProcedure:
+#     def __init__(self, model: nn.Module, device: str = "cpu", logger: Optional[Logger] = None):
+#     self.model = model.to(device)
+#     self.device = device
+#     self.logger = logger
+#     self.val_env = None
+#     self._val_phase = False
 
 
 class NeuralProcedurePair:
@@ -34,15 +34,11 @@ class NeuralProcedurePair:
     This is done by providing a repair and a destroy procedure.
     Either one or the other procedures needs to be neural based.
     """
-    def __init__(self,
-                 destroy_procedure: DestroyProcedure,
-                 repair_procedure: RepairProcedure):
-        assert isinstance(destroy_procedure, NeuralProcedure) or isinstance(repair_procedure, NeuralProcedure), \
-            f"Either the destroy procedure or the repair procedure must to be neural based."
+    def __init__(self, destroy_procedure, repair_procedure):
         self.destroy_procedure = destroy_procedure
-        self.destroy_is_neural = isinstance(self.destroy_procedure, NeuralProcedure)
+        self.destroy_is_neural = False
         self.repair_procedure = repair_procedure
-        self.repair_is_neural = isinstance(self.repair_procedure, NeuralProcedure)
+        self.repair_is_neural = True
 
     def _evaluate(self, data: DataLoader, batch_size: int) -> Dict:
         """
