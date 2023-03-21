@@ -4,7 +4,7 @@ import pytest
 
 from context import nlns
 from nlns.generators import generate_multiple_instances
-from nlns.instances import VRPSolution
+from nlns.instances import VRPSolution, Route
 from nlns.operators.initial import nearest_neighbor_solution
 
 
@@ -20,7 +20,7 @@ def set_default_rng():
 def empty_solutions(request):
     # TODO: Handle seeds in generate_multiple_instances
 
-    return tuple(map(VRPSolution,
+    return tuple(map(lambda x: VRPSolution(x, [Route([1], x), Route([2], x)]),
                      generate_multiple_instances(50, request.param)))
 
 

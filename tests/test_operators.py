@@ -8,22 +8,35 @@ from helpers import (set_default_rng, empty_solutions, skipif_module,   # NOQA
 from context import nlns
 from nlns.operators import LNSOperator
 from nlns.operators.repair import GreedyRepair
+from nlns.operators.repair.rl_agent_repair import RLAgentRepair
+from nlns.models import VRPActorModel
 try:
     from nlns.operators.repair.scip import SCIPRepair
 except ModuleNotFoundError:
     SCIPRepair = MissingPlaceholder('SCIPRepair')
 from nlns.operators.destroy import PointDestroy, RandomDestroy, TourDestroy
 
+
+def rlagent_repair_factory():
+    return RLAgentRepair(VRPActorModel())
+
+
+rlagent_repair_factory.__name__ = 'RLAgentRepair'
+
+
 repair_operators = [
             (GreedyRepair, 42),
-            pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt')])
+            pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt')]),
+            (rlagent_repair_factory, 42)
         ]
 
 # Necessary as long as we have the reproducibility bug on SCIPRepair
 repair_operators_reproducibility = [
             (GreedyRepair, 42),
             pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt'),
-                                                pytest.mark.xfail])
+                                                pytest.mark.xfail]),
+            pytest.param(rlagent_repair_factory, 42,
+                         marks=[pytest.mark.xfail])
         ]
 
 destroy_operators = [
