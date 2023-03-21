@@ -8,7 +8,7 @@ from helpers import (set_default_rng, empty_solutions, skipif_module,   # NOQA
 from context import nlns
 from nlns.operators import LNSOperator
 from nlns.operators.repair import GreedyRepair
-from nlns.operators.repair.rl_agent_repair import RLAgentRepair
+from nlns.operators.repair.rl_agent import RLAgentRepair
 from nlns.models import VRPActorModel
 try:
     from nlns.operators.repair.scip import SCIPRepair
