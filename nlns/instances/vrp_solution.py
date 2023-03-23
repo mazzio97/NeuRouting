@@ -1,4 +1,4 @@
-from typing import List, Tuple, Iterable
+from typing import List, Tuple, Iterable, Sequence
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -90,14 +90,26 @@ class Route(List[int]):
 
 
 class VRPSolution:
+    """VRP solution, associated to a specific instance.
 
-    def __init__(self, instance: VRPInstance, routes: List[Route] = None):
+    Represented by a collection of :class:`Route`.
+
+    Args:
+        instance: Associated VRP instance.
+        routes: Collection of routes to be included into the solution.
+            Defaults to no routes (empty solution).
+    """
+
+    def __init__(self, instance: VRPInstance,
+                 routes: Iterable[Route] = ()):
         self.instance = instance
-        self.routes = routes if routes is not None else []
+        self.routes = list(routes)
         self.time_taken = -1
 
     @classmethod
-    def from_edges(cls, instance: VRPInstance, edges: List[tuple] = None):
+    def from_edges(cls, instance: VRPInstance,
+                   edges: Sequence[Tuple[int, int]]) -> 'VRPSolution':
+        """Instantiate a solution from an edge list."""
         routes = []
         for edge in edges:
             if edge[0] == 0:
@@ -112,12 +124,14 @@ class VRPSolution:
                 routes.append(path)
         return cls(instance=instance, routes=routes)
 
-    def as_edges(self) -> List[tuple]:
+    def as_edges(self) -> List[Tuple[int, int]]:
+        """Retrieve solution in form of an edge list."""
         return [(from_id, to_id)
                 for route in self.complete_routes() + self.incomplete_routes()
                 for from_id, to_id in zip(route[:-1], route[1:])]
 
     def adjacency_matrix(self) -> np.ndarray:
+        """Retrieve solution in form on a numpy adjacency matrix."""
         adj = np.zeros((self.instance.n_customers + 1,
                         self.instance.n_customers + 1), dtype=int)
         for i, j in self.as_edges():
@@ -127,6 +141,7 @@ class VRPSolution:
         return adj
 
     def isolated_customers(self) -> List[int]:
+        """Retrieve a list of customers included in singular routes."""
         return [route[0] for route in self.routes if len(route) == 1]
 
     def missing_customers(self) -> List[int]:
@@ -139,6 +154,14 @@ class VRPSolution:
         return list(missing)
 
     def verify(self) -> bool:
+        """Verify that a solution is well formed.
+
+        Destined to be removed or revamped in the future.
+
+        Raises:
+            AssertionError: If some metrics of the solution are not
+                well formed (e.g. total capacity is exceeded).
+        """
         # Each tour does not exceed the vehicle capacity
         demands = [0] + self.instance.demands
         loads = [sum(demands[node] for node in tour) for tour in self.routes]
@@ -159,27 +182,39 @@ class VRPSolution:
 
     @property
     def cost(self) -> float:
+        """Total cost of the solution."""
         return sum(self.instance.distance_matrix[from_id, to_id]
                    for from_id, to_id in self.as_edges())
 
     def complete_routes(self) -> List[Route]:
+        """Retrieve list of complete routes (start and end at depot)."""
         return [route for route in self.routes if route.is_complete()]
 
     def incomplete_routes(self) -> List[Route]:
+        """Retrieve list of incomplete routes.
+
+        Routes that do not start or end at depot.
+        """
         return [route for route in self.routes
                 if route.is_incomplete() and len(route) > 1]
 
     def get_customer_route(self, customer_idx: int) -> Route:
+        """Retrieve route containing a specific customer."""
         for route in self.routes:
             if customer_idx in route:
                 return route
 
     def get_edge_route(self, edge: Tuple[int, int]) -> Route:
+        """Retrieve route containing a specific edge."""
         for route in self.routes:
             if edge[0] in route and edge[1] in route:
                 return route
 
-    def destroy_nodes(self, to_remove: List[int]):
+    def destroy_nodes(self, to_remove: Iterable[int]):
+        """Remove customers from the solution.
+
+        Routes contaning specified customers are split.
+        """
         incomplete_routes = []
         complete_routes = []
         removed = []
@@ -219,6 +254,10 @@ class VRPSolution:
         self.routes = complete_routes + incomplete_routes
 
     def destroy_edges(self, to_remove: List[tuple]):
+        """Remove edges from the solution.
+
+        Routes containing specified edges are split.
+        """
         for edge in to_remove:
             route = self.get_edge_route(edge)
             splits = list(split_after(route, lambda x: x == edge[0]))
@@ -233,6 +272,7 @@ class VRPSolution:
                 self.routes.append(postsplit)
 
     def plot(self, ax=None, title=None):
+        """Plot solution on matplotlib axis."""
         if ax is None:
             ax = plt.gca()
         plot_solution(ax, self, title)
