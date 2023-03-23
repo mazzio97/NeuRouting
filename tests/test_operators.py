@@ -17,8 +17,11 @@ except ModuleNotFoundError:
 from nlns.operators.destroy import PointDestroy, RandomDestroy, TourDestroy
 
 
+vrp_actor_model = VRPActorModel()
+
+
 def rlagent_repair_factory():
-    return RLAgentRepair(VRPActorModel())
+    return RLAgentRepair(vrp_actor_model)
 
 
 rlagent_repair_factory.__name__ = 'RLAgentRepair'
@@ -35,8 +38,7 @@ repair_operators_reproducibility = [
             (GreedyRepair, 42),
             pytest.param(SCIPRepair, 42, marks=[skipif_module('pyscipopt'),
                                                 pytest.mark.xfail]),
-            pytest.param(rlagent_repair_factory, 42,
-                         marks=[pytest.mark.xfail])
+            (rlagent_repair_factory, 42)
         ]
 
 destroy_operators = [

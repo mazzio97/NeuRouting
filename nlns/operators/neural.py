@@ -1,20 +1,16 @@
-import os
 import time
-from abc import abstractmethod, abstractclassmethod
+import contextlib
 from math import ceil
-from typing import Union, Optional, List, Callable, Tuple, Dict
+from typing import Dict, Optional
 from more_itertools import chunked
 from copy import deepcopy
 
 import numpy as np
 import torch
-from torch import nn
 from torch_geometric.data import DataLoader
-import pytorch_lightning as pl
 
 from tqdm.auto import tqdm
-from nlns.instances import VRPInstance, VRPSolution, VRPNeuralSolution
-from nlns.operators import LNSOperator
+from nlns.instances import VRPNeuralSolution
 from nlns.operators.initial import nearest_neighbor_solution
 from nlns.utils.logging import Logger, EmptyLogger
 
@@ -195,3 +191,50 @@ class NeuralProcedurePair:
                     # }, "training")
 
         print(f"Training completed successfully in {time.time() - start_time} seconds.")
+
+
+class TorchReproducibilityMixin:
+    """Provide reproducibility for torch based operators.
+
+    Mixin designed to be used with :class:`nlns.LNSOperator` subclasses.
+    """
+    _torch_reproducibility: bool = False
+    torch_rng_state: Optional[torch.Tensor] = None
+
+    def init_torch_reproducibility(self, seed: Optional[int]):
+        """Enable reproducible results for the torch operator.
+
+        To be used inside
+        :meth:`nlns.operators.LNSOperator.set_random_state`.
+        """
+        self._torch_reproducibility = True
+        with torch.random.fork_rng():
+            torch.manual_seed(seed)
+            self.torch_rng_state = torch.get_rng_state()
+
+    @property
+    def torch_reproducibility(self) -> bool:
+        """Return whether reproducibility for the operator is enabled."""
+        return self._torch_reproducibility
+
+    @contextlib.contextmanager
+    def sync_torch_rng_state(self):
+        """Context manager: fork random state and reproducibility.
+
+        To be used at inference time to correctly fork rng state without
+        contaminating global state.
+        """
+        # Do nothing if reproducibility is not active
+        if not self._torch_reproducibility:
+            yield
+            return
+
+        with torch.random.fork_rng() as fork:
+            torch.set_rng_state(self.torch_rng_state)
+            torch.use_deterministic_algorithms(True)
+            try:
+                yield [fork]
+            finally:
+                self.torch_rng_state = torch.get_rng_state()
+
+            torch.use_deterministic_algorithms(False)

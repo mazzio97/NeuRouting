@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Optional
 
 import torch
 import numpy as np
@@ -7,19 +7,39 @@ import torch.nn.functional as F
 from torch import optim
 
 from nlns.operators import LNSOperator
+from nlns.operators.neural import TorchReproducibilityMixin
 from nlns.instances import VRPSolution, VRPNeuralSolution
 from nlns.models import VRPActorModel, VRPCriticModel
 
 
-class RLAgentRepair(LNSOperator):
+class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
+    """Repair solutions by applying a deep reinforcement learning model.
+
+    The model is an actor critic attention based approach, as defined
+    by `Huttong & Tierney (2020) <https://doi.org/10.3233/FAIA200124>`_.
+
+    Pytorch is required.
+    """
+
     def __init__(self, actor: VRPActorModel, critic: VRPCriticModel = None,
                  device='cpu', logger=None):
         self.model = actor.to(device)
         self.critic = critic.to(device) if critic is not None else critic
         self.device = device
         self.logger = logger
-        # self.val_env = None
-        # self._val_phase = False
+
+    def set_random_state(self, seed: Optional[int]):
+        """Set random state, enable reproducibility for torch model.
+
+        Args:
+            seed: An integer used to seed all the required generators.
+                Conversely to other operators that accept a variety of
+                types, it must be an integer, as torch only accepts
+                integer seeds. TODO: Pass ``None`` to disable torch
+                reproducibility.
+        """
+        super().set_random_state(seed)
+        self.init_torch_reproducibility(seed)
 
     def call(self, solutions: Sequence[VRPNeuralSolution]):
         """Completely repair the given solutions.
@@ -56,10 +76,19 @@ class RLAgentRepair(LNSOperator):
 
     def __call__(self, solutions: Sequence[VRPSolution]
                  ) -> Sequence[VRPSolution]:
+        """Apply the operator to all given solutions.
+
+        Args:
+            solutions: The destroyed solutions to be repaired.
+
+        Returns:
+            The completely repaired solutions.
+        """
         neural_solutions = [VRPNeuralSolution.from_solution(solution)
                             for solution in solutions]
-        with torch.no_grad():
-            self.call(neural_solutions)
+        with self.sync_torch_rng_state():
+            with torch.no_grad():
+                self.call(neural_solutions)
 
         for solution, neural in zip(solutions, neural_solutions):
             solution.routes = neural.routes
@@ -138,8 +167,8 @@ class RLAgentRepair(LNSOperator):
             # origin at random
             for i, solution in enumerate(incomplete_solutions):
                 if origin_idx[i] == 0 and not solutions_repaired[i]:
-                    origin_idx[i] = np.random.choice(
-                        solution.incomplete_nn_idx, 1).item()
+                    origin_idx[i] = self.rng.choice(
+                        solution.incomplete_nn_idx)
 
             mask = self._get_mask(origin_idx, dynamic_input,
                                   incomplete_solutions, vehicle_capacity).to(
