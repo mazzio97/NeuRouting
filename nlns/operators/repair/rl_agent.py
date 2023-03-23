@@ -8,8 +8,8 @@ from torch import optim
 
 from nlns.operators import LNSOperator
 from nlns.operators.neural import TorchReproducibilityMixin
-from nlns.instances import VRPSolution, VRPNeuralSolution
-from nlns.models import VRPActorModel, VRPCriticModel
+from nlns.instances import VRPSolution
+from nlns.models import VRPActorModel, VRPCriticModel, RLAgentSolution
 
 
 class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
@@ -41,7 +41,7 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
         super().set_random_state(seed)
         self.init_torch_reproducibility(seed)
 
-    def call(self, solutions: Sequence[VRPNeuralSolution]):
+    def call(self, solutions: Sequence[RLAgentSolution]):
         """Completely repair the given solutions.
 
         This method shall be used during training. For faster inference,
@@ -84,7 +84,7 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
         Returns:
             The completely repaired solutions.
         """
-        neural_solutions = [VRPNeuralSolution.from_solution(solution)
+        neural_solutions = [RLAgentSolution.from_solution(solution)
                             for solution in solutions]
         with self.sync_torch_rng_state():
             with torch.no_grad():

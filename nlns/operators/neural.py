@@ -2,15 +2,15 @@ import time
 import contextlib
 from math import ceil
 from typing import Dict, Optional
-from more_itertools import chunked
 from copy import deepcopy
 
 import numpy as np
 import torch
 from torch_geometric.data import DataLoader
-
+from more_itertools import chunked
 from tqdm.auto import tqdm
-from nlns.instances import VRPNeuralSolution
+
+from nlns.models import RLAgentSolution
 from nlns.operators.initial import nearest_neighbor_solution
 from nlns.utils.logging import Logger, EmptyLogger
 
@@ -53,7 +53,7 @@ class NeuralProcedurePair:
         start_time = time.time()
 
         validation_solutions = [
-            VRPNeuralSolution.from_solution(
+            RLAgentSolution.from_solution(
                 nearest_neighbor_solution(instance)) for
             instance in data]
         costs = [solution.cost for solution in validation_solutions]
@@ -120,7 +120,7 @@ class NeuralProcedurePair:
 
         # Pregenerate initial solutions
         initial_solutions = [
-            VRPNeuralSolution.from_solution(
+            RLAgentSolution.from_solution(
                 nearest_neighbor_solution(inst))
             for inst in train]
 

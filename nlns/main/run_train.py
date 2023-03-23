@@ -7,7 +7,7 @@ from nlns.utils.logging import MultipleLogger, ConsoleLogger, WandBLogger
 from nlns.operators.neural import NeuralProcedurePair
 from nlns.operators.destroy import PointDestroy, TourDestroy, RandomDestroy
 from nlns.operators.repair import GreedyRepair
-from nlns.operators.repair.rl_agent_repair import RLAgentRepair
+from nlns.operators.repair.rl_agent import RLAgentRepair
 from nlns.models import VRPActorModel, VRPCriticModel
 from nlns.generators.dataset import NazariDataset
 from nlns.generators.nazari_generator import generate_nazari_instance
