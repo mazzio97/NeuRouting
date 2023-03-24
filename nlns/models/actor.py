@@ -5,8 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from nlns.instances import VRPInstance
-from nlns.instances.vrp_solution import VRPSolution, Route
+from nlns.instances import VRPInstance, VRPSolution, Route
 
 
 class RLAgentSolution(VRPSolution):
