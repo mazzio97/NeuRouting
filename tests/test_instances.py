@@ -3,6 +3,7 @@ import numpy as np
 
 from context import nlns                                    # NOQA
 from helpers import set_default_rng                         # NOQA
+from nlns.generators import generate_instances
 from nlns.generators.nazari_generator import (generate_nazari_instance,
                                               generate_nazari_instances)
 
@@ -39,3 +40,24 @@ def test_generate_nazari_instances(n_instances, n_customers):
 
     for instance in instances:
         len(instance.customers) == n_customers
+
+
+@pytest.mark.parametrize('n_instances, n_customers',
+                         [(0, 1), (1, 20), (2, (20, 50)), (10, 10),
+                          (10, (20, 50))])
+def test_generate_instances(n_instances, n_customers):
+    # TODO: test different distributions, test reproducibility
+    instances = tuple(generate_instances(n_instances, n_customers))
+
+    assert len(instances) == n_instances
+
+    if type(n_customers) is int:
+        n_customers = n_customers,
+
+    instance_customers = [len(instance.customers) for instance in instances]
+
+    for customer in instance_customers:
+        assert customer in n_customers
+
+    for customer in n_customers:
+        assert not instances or customer in instance_customers
