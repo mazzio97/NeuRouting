@@ -33,7 +33,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     n_customers = args.n_customers
     log_interval = args.log_interval
-    
+
     save_path = args.out
     patience = args.patience
 
@@ -45,10 +45,10 @@ if __name__ == "__main__":
     np.random.seed(seed)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    train = NazariDataset(steps * batch_size, n_customers, 
+    train = NazariDataset(steps * batch_size, n_customers,
                           batch_size=steps * batch_size,
-                          lkh_pass=10, 
-                          lkh_runs=1, 
+                          lkh_pass=10,
+                          lkh_runs=1,
                           workers=batch_size)
     # validation dataset is consolidated into a list to always use the same set
     validation = list(NazariDataset(val_samples, n_customers,
@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
         if log_interval is not None and step_idx % log_interval == 0:
             logger.log(
-                { "step": step_idx, "loss": np.mean(batch_loss) }, 
+                { "step": step_idx, "loss": np.mean(batch_loss) },
                 "training")
             batch_loss = list()
 
@@ -86,13 +86,13 @@ if __name__ == "__main__":
                 with torch.no_grad():
                     pred, loss, info = destroy._evaluate(val)
                     val_losses.append(loss)
-            
+
             val_loss = np.mean(val_losses)
             patience_strikes = 0 if val_loss < last_validation_loss else patience_strikes + 1
             if patience_strikes > patience:
                 # stop training since maximum patience has been reached
                 break
-            
+
             last_validation_loss = val_loss
             logger.log({ "steps": step_idx, "loss": val_loss }, "validation")
     end_time = time()
