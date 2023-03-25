@@ -1,8 +1,7 @@
 import torch
 import math
 
-from matplotlib import pyplot as plt
-
+import nlns
 from nlns.instances import VRPInstance
 
 GRID_SIZE = 1000
@@ -119,7 +118,8 @@ def sample_triangular(sz, a, b, c, device=None):
     )
 
 
-def generate_uchoa_instances(n_instances: int, n_customers: int):
+def generate_uchoa_instances(n_instances: int, n_customers: int,
+                             seed: nlns.RandomSeedOrState = None):
     depot, depot_types = generate_depot_coordinates(n_instances)
     customers, customer_types = generate_customer_coordinates(n_instances, n_customers)
     demands = generate_demands(customers)
