@@ -3,9 +3,9 @@ import numpy as np
 
 from context import nlns                                    # NOQA
 from helpers import set_default_rng                         # NOQA
-from nlns.generators import generate_instances
-from nlns.generators.nazari_generator import (generate_nazari_instance,
-                                              generate_nazari_instances)
+from nlns.instances import generate_instances
+from nlns.instances.nazari import (generate_nazari_instances,
+                                   generate_nazari_instance)
 
 
 @pytest.mark.parametrize('n_customers', (20, 50, 100))

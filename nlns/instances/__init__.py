@@ -362,3 +362,9 @@ class VRPSolution:
     def __deepcopy__(self, memo):
         routes_copy = [Route(route[:], self.instance) for route in self.routes]
         return VRPSolution(self.instance, routes_copy)
+
+
+from .generation import generate_instance, generate_instances           # NOQA
+from . import uchoa, nazari                                             # NOQA
+# For a more convenient access to the namespace while avoiding circular
+# imports, import here the general generator functions

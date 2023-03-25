@@ -3,8 +3,7 @@ import importlib
 import pytest
 
 from context import nlns
-from nlns.generators import generate_instances
-from nlns.instances import VRPSolution, Route
+from nlns.instances import VRPSolution, Route, generate_instances
 from nlns.operators.initial import nearest_neighbor_solution
 
 

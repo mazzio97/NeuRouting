@@ -4,14 +4,15 @@ from itertools import chain
 import numpy as np
 
 import nlns
-from nlns.generators.nazari_generator import generate_nazari_instances
-from nlns.generators.uchoa_generator import generate_uchoa_instances
 from nlns.instances import VRPInstance
+from .nazari import generate_nazari_instances
+from .uchoa import generate_uchoa_instances
 
-InstancesGenerator = Callable[[int, int, nlns.RandomSeedOrState], VRPInstance]
+InstancesGenerator = Callable[[int, int, nlns.RandomSeedOrState],
+                              'VRPInstance']
 
 distributions = {'nazari': generate_nazari_instances,
-                 'uchoha': generate_uchoa_instances}
+                 'uchoa': generate_uchoa_instances}
 
 
 def generate_instances(n_instances: int,
@@ -32,7 +33,7 @@ def generate_instances(n_instances: int,
             Either a function in the format specified by
             :attr:`InstancesGenerator` or a string representing a known
             distributions. Known distributions are ``nazari`` and
-            ``uchoha``.
+            ``uchoa``.
         seed: A seed or random state for reproducible instances
             generation.
     """
