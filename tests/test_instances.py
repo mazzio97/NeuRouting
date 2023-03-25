@@ -3,9 +3,10 @@ import numpy as np
 
 from context import nlns                                    # NOQA
 from helpers import set_default_rng                         # NOQA
-from nlns.instances import generate_instances
+from nlns.instances import generate_instances, VRPInstance
 from nlns.instances.nazari import (generate_nazari_instances,
                                    generate_nazari_instance)
+from nlns.instances.uchoa import generate_uchoa_instances
 
 
 @pytest.mark.parametrize('n_customers', (20, 50, 100))
@@ -33,13 +34,34 @@ def test_generate_nazari_instance_reproducibility(n_customers, seed, np_seed):
                 and customer[1] == customer_copy[1])
 
 
+@pytest.mark.parametrize('distribution', (generate_nazari_instances,
+                                          generate_uchoa_instances))
 @pytest.mark.parametrize('n_instances', (0, 1, 10, 20))
 @pytest.mark.parametrize('n_customers', (20, 50, 100))
-def test_generate_nazari_instances(n_instances, n_customers):
-    instances = generate_nazari_instances(n_instances, n_customers)
+def test_generate_distribution_instances(distribution, n_instances,
+                                         n_customers):
+    instances = distribution(n_instances, n_customers)
 
     for instance in instances:
-        len(instance.customers) == n_customers
+        assert isinstance(instance, VRPInstance)
+        assert len(instance.customers) == n_customers
+
+
+@pytest.mark.parametrize('distribution',
+                         (generate_nazari_instances,
+                          pytest.param(generate_uchoa_instances,
+                                       marks=pytest.mark.xfail)))
+@pytest.mark.parametrize('n_instances', (0, 1, 10, 20))
+@pytest.mark.parametrize('n_customers', (20, 50, 100))
+def test_generate_distribution_instances_reproducibility(
+        distribution, n_instances, n_customers, seed=1):
+    instances = distribution(n_instances, n_customers, seed)
+    instances_copy = distribution(n_instances, n_customers, seed)
+
+    for instance, instance_copy in zip(instances, instances_copy):
+        assert len(instance.customers) == len(instance_copy.customers)
+        assert tuple(instance.demands) == tuple(instance_copy.demands)
+        assert instance.capacity == instance_copy.capacity
 
 
 @pytest.mark.parametrize('n_instances, n_customers',
