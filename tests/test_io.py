@@ -1,7 +1,8 @@
 import pytest
 
 from helpers import get_filename
-from nlns.utils.vrp_io import read_vrp_str, read_vrp, GRID_DIM
+from nlns.instances import VRPInstance
+from nlns.utils.vrp_io import read_vrp_str, read_vrp, write_vrp_str, GRID_DIM
 
 
 INSTANCE_STRING = """NAME : instance
@@ -47,3 +48,13 @@ def test_read_vrp(filename, capacity, n_customers):
 
     assert instance.capacity == capacity
     assert len(instance.customers) == n_customers
+
+
+@pytest.mark.parametrize('string, name, capacity, n_customers',
+                         [(INSTANCE_STRING, 'instance', 20, 5)])
+def test_write_vrp_str(string, name, capacity, n_customers):
+    # For the moment, use the read function to generate the instance
+    instance = read_vrp_str(INSTANCE_STRING, GRID_DIM)
+    vrp_string = write_vrp_str(instance, name, GRID_DIM)
+
+    assert vrp_string.strip() == string.strip()

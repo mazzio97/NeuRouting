@@ -73,6 +73,39 @@ def read_vrp(filepath='', file=None, grid_dim: int = GRID_DIM) -> VRPInstance:
     return read_vrp_str(vrp_string, grid_dim)
 
 
+def write_vrp_str(instance: VRPInstance, name: str, grid_dim=GRID_DIM) -> str:
+    """Write a VRP instance to string.
+
+    Args:
+        instance: The input instance.
+        name: Arbitrary string name for the instance.
+        grid_dim: See :func:`vrp_read_str`.
+
+    Returns:
+        A string representing the instance.
+    """
+    lines = []
+    for key, value in (
+                ('NAME', name),
+                ('TYPE', 'CVRP'),
+                ('DIMENSION', instance.n_customers + 1),
+                ('EDGE_WEIGHT_TYPE', 'EUC_2D'),
+                ('CAPACITY', int(instance.capacity))):
+        lines.append(f'{key} : {value}')
+
+    lines.append('NODE_COORD_SECTION')
+    for i, (x, y) in enumerate([instance.depot] + instance.customers):
+        x, y = int(x * grid_dim + 0.5), int(y * grid_dim + 0.5)
+        lines.append(f'{i + 1}\t{x}\t{y}')
+
+    lines.append('\nDEMAND_SECTION')
+    lines.append('\n'.join(f'{i + 1}\t{d}'
+                           for i, d in enumerate([0] + instance.demands)))
+    lines += ['DEPOT_SECTION', '1', '-1', 'EOF']
+
+    return '\n'.join(lines)
+
+
 def write_vrp(instance: VRPInstance, filepath: str, grid_dim=GRID_DIM):
     with open(filepath, 'w') as f:
         f.write("\n".join([
