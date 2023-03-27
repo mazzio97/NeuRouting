@@ -49,8 +49,7 @@ def test_generate_distribution_instances(distribution, n_instances,
 
 @pytest.mark.parametrize('distribution',
                          (generate_nazari_instances,
-                          pytest.param(generate_uchoa_instances,
-                                       marks=pytest.mark.xfail)))
+                          generate_uchoa_instances))
 @pytest.mark.parametrize('n_instances', (0, 1, 10, 20))
 @pytest.mark.parametrize('n_customers', (20, 50, 100))
 def test_generate_distribution_instances_reproducibility(
