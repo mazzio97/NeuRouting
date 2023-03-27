@@ -1,4 +1,5 @@
 import importlib
+import os.path
 
 import pytest
 
@@ -49,3 +50,8 @@ class MissingPlaceholder:
 
     def __init__(self, name: str):
         self.__name__ = name
+
+
+def get_filename(filename):
+    """Retrieve test local filename."""
+    return os.path.join(os.path.dirname(__file__), filename)

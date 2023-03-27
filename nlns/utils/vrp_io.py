@@ -10,33 +10,67 @@ from nlns.instances import VRPInstance, VRPSolution
 GRID_DIM = 100000
 
 
-def read_vrp(filepath, grid_dim: int = GRID_DIM) -> VRPInstance:
-    with open(filepath, "r") as f:
-        lines = [ll.strip() for ll in f]
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            if line.startswith("DIMENSION"):
-                size = int(line.split(':')[1])
-            elif line.startswith("CAPACITY"):
-                capacity = int(line.split(':')[1])
-            elif line.startswith('NODE_COORD_SECTION'):
-                locations = np.loadtxt(lines[i + 1:i + 1 + size], dtype=int)
-                i = i + size
-            elif line.startswith('DEMAND_SECTION'):
-                demands = np.loadtxt(lines[i + 1:i + 1 + size], dtype=int)
-                i = i + size
-            i += 1
+def _norm(coord: int, grid_dim=GRID_DIM) -> float:
+    """Normalize coordinate given a grid size."""
+    return float(coord) / grid_dim
 
-    def norm(coord: int) -> float:
-        return float(coord) / grid_dim
+
+def read_vrp_str(vrp_string: str, grid_dim: int = GRID_DIM) -> VRPInstance:
+    """Read a VRP instance from string.
+
+    Args:
+        vrp_string: The input string.
+        grid_dim: Dimension of the grid. The input coordinates are
+            expected to be integers, while neurouting internal
+            representation is constrained in a unit square. The grid
+            dimension is used to normalize coordinates accordingly.
+
+    Returns:
+        A VRP instance.
+    """
+    lines = tuple(map(str.strip, vrp_string.splitlines()))
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("DIMENSION"):
+            size = int(line.split(':')[1])
+        elif line.startswith("CAPACITY"):
+            capacity = int(line.split(':')[1])
+        elif line.startswith('NODE_COORD_SECTION'):
+            locations = np.loadtxt(lines[i + 1:i + 1 + size], dtype=int)
+            i = i + size
+        elif line.startswith('DEMAND_SECTION'):
+            demands = np.loadtxt(lines[i + 1:i + 1 + size], dtype=int)
+            i = i + size
+        i += 1
 
     return VRPInstance(
-        depot=(norm(locations[0][1]), norm(locations[0][2])),
-        customers=[(norm(loc[1]), norm(loc[2])) for loc in locations[1:]],
+        depot=(_norm(locations[0][1]), _norm(locations[0][2])),
+        customers=[(_norm(loc[1]), _norm(loc[2])) for loc in locations[1:]],
         demands=[d[1] for d in demands[1:]],
         capacity=capacity
     )
+
+
+def read_vrp(filepath='', file=None, grid_dim: int = GRID_DIM) -> VRPInstance:
+    """Read a VRP instance from file.
+
+    Args:
+        filepath: Filename or path to read the instance from.
+        file: A filelike object to read from. If given, overrides
+            ``filepath``
+        grid_dim: See :func:`read_vrp_str`.
+
+    Returns:
+        A VRP instance.
+    """
+    if file is None:
+        with open(filepath) as fin:
+            vrp_string = fin.read()
+    else:
+        vrp_string = file.read()
+
+    return read_vrp_str(vrp_string, grid_dim)
 
 
 def write_vrp(instance: VRPInstance, filepath: str, grid_dim=GRID_DIM):
