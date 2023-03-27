@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from more_itertools import split_after
@@ -106,31 +106,39 @@ def write_vrp_str(instance: VRPInstance, name: str, grid_dim=GRID_DIM) -> str:
     return '\n'.join(lines)
 
 
-def write_vrp(instance: VRPInstance, filepath: str, grid_dim=GRID_DIM):
-    with open(filepath, 'w') as f:
-        f.write("\n".join([
-            f"{key} : {value}"
-            for key, value in (
-                ("NAME", os.path.splitext(filepath)[0].split('/')[-1]),
-                ("TYPE", "CVRP"),
-                ("DIMENSION", instance.n_customers + 1),
-                ("EDGE_WEIGHT_TYPE", "EUC_2D"),
-                ("CAPACITY", int(instance.capacity))
-            )
-        ]))
-        f.write("\n")
-        f.write("NODE_COORD_SECTION\n")
-        for i, (x, y) in enumerate([instance.depot] + instance.customers):
-            x, y = int(x * grid_dim + 0.5), int(y * grid_dim + 0.5)
-            f.write(f"{i + 1}\t{x}\t{y}\n")
-        f.write("\n")
-        f.write("DEMAND_SECTION\n")
-        f.write("\n".join([f"{i + 1}\t{d}" for i, d in enumerate([0] + instance.demands)]))
-        f.write("\n")
-        f.write("DEPOT_SECTION\n")
-        f.write("1\n")
-        f.write("-1\n")
-        f.write("EOF\n")
+def write_vrp(instance: VRPInstance, filepath: Optional[str] = None, file=None,
+              name: Optional[str] = None, grid_dim=GRID_DIM):
+    """Write a VRP instance to string.
+
+    Args:
+        instance: The input instance.
+        filepath: Filename or path to save the instance to.
+        file: A filelike object to write to. If given, overrides
+            ``filepath``
+        name: A name for the instance. If omitted, the filepath is used
+            to determine it (base name of the file is used). If ``file``
+            is used instead of ``filepath``, it is mandatory to specify
+            the name explicitly.
+        grid_dim: See :func:`vrp_read_str`.
+    """
+    # Handle instance name
+    if filepath is None and name is None:
+        raise ValueError('If no filepath is specified, a name is mandatory.')
+
+    if filepath is not None:
+        instance_name = os.path.splitext(os.path.basename(filepath))[0]
+
+    if name is not None:
+        instance_name = name
+
+    # Generate and dump string
+    vrp_string = write_vrp_str(instance, instance_name, grid_dim=grid_dim)
+
+    if file is None:
+        with open(filepath, 'w') as fout:
+            fout.write(vrp_string)
+    else:
+        file.write(vrp_string)
 
 
 def read_solution(filename: str, n: int) -> List[List[int]]:
