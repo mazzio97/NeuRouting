@@ -32,8 +32,6 @@ def generate_nazari_instance(n_customers: int,
     The capacity value is computed as the linear interpolation
     between the values presented in the paper itself.
 
-    For reproducibility, provide
-
     [1] https://proceedings.neurips.cc/paper/2018/hash/9fb4651c05b2ed70fba5afe0b039a550-Abstract.html
 
     [2] https://arxiv.org/pdf/1803.08475.pdf
