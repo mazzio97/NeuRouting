@@ -217,6 +217,30 @@ def read_solution(instance: VRPInstance, filepath: str = '',
     return VRPSolution(instance, routes)
 
 
+def write_routes_str(solution: VRPSolution, grid_dim: int = GRID_DIM) -> str:
+    """Write VRP solution routes to string.
+
+    Args:
+        solution: Input solution.
+        num_nodes: Expected number of customers.
+    Return:
+        A string representing the encoded routes of the solution.
+        Instance information is not preserved in this encoding. In case
+        saving both an instance and its solution is needed, consider
+        dumping the instance on a separate string/file, e.g. with
+        :func:`write_vrp_str` or :func:`write_vrp`.
+    """
+    lines = []
+    lines.append(f'DIMENSION {grid_dim}\nTOUR_SECTION')
+
+    for tour in solution.routes:
+        for node in tour[:-1]:
+            lines.append(f'{node + 1}')
+    lines.append('-1')
+
+    return '\n'.join(lines)
+
+
 def write_solution(solution: VRPSolution, filename: str):
     with open(filename, 'w') as f:
         f.write(f"DIMENSION {GRID_DIM}\n")

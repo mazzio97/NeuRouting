@@ -2,9 +2,10 @@ import pytest
 from io import StringIO
 
 from helpers import get_filename
+from nlns.instances import VRPSolution, Route
 from nlns.utils.vrp_io import (read_vrp_str, read_vrp, write_vrp_str,
                                write_vrp, read_routes_str, read_routes,
-                               read_solution,
+                               read_solution, write_routes_str,
                                GRID_DIM)
 
 
@@ -118,3 +119,14 @@ def test_read_solution(filename, instance_string, routes):
 
     for new_route, route in zip(solution.routes, routes):
         assert new_route == route
+
+
+@pytest.mark.parametrize('solution_string, instance_string, routes',
+                         [(SOLUTION_STRING, INSTANCE_STRING,
+                           SOLUTION_ROUTES)])
+def test_write_routes_str(solution_string, instance_string, routes):
+    instance = read_vrp_str(instance_string)
+    routes = [Route(t, instance) for t in routes]
+    sol_string = write_routes_str(VRPSolution(instance, routes), GRID_DIM)
+
+    assert sol_string.strip() == solution_string.strip()
