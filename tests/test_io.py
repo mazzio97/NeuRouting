@@ -3,7 +3,8 @@ from io import StringIO
 
 from helpers import get_filename
 from nlns.utils.vrp_io import (read_vrp_str, read_vrp, write_vrp_str,
-                               write_vrp, GRID_DIM)
+                               write_vrp, read_routes_str, read_routes,
+                               GRID_DIM)
 
 
 INSTANCE_STRING = """NAME : instance
@@ -31,6 +32,20 @@ DEPOT_SECTION
 -1
 EOF
 """
+
+SOLUTION_STRING = """DIMENSION 100000
+TOUR_SECTION
+1
+2
+3
+6
+5
+1
+4
+-1
+"""
+
+SOLUTION_ROUTES = [[0, 1, 2, 5, 4, 0], [0, 3, 0]]
 
 
 @pytest.mark.parametrize('string, capacity, n_customers',
@@ -72,3 +87,21 @@ def test_write_vrp(name, string):
 
     buffer.seek(0)
     assert buffer.read().strip() == string.strip()
+
+
+@pytest.mark.parametrize('string, num_nodes, routes',
+                         [(SOLUTION_STRING, 5, SOLUTION_ROUTES)])
+def test_read_routes_str(string, num_nodes, routes):
+    new_routes = read_routes_str(string, num_nodes)
+
+    for new_route, route in zip(new_routes, routes):
+        assert new_route == route
+
+
+@pytest.mark.parametrize('filename, num_nodes, routes',
+                         [(get_filename('solution.sol'), 5, SOLUTION_ROUTES)])
+def test_read_routes(filename, num_nodes, routes):
+    new_routes = read_routes(num_nodes, filename)
+
+    for new_route, route in zip(new_routes, routes):
+        assert new_route == route

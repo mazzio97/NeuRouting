@@ -141,27 +141,59 @@ def write_vrp(instance: VRPInstance, filepath: Optional[str] = None, file=None,
         file.write(vrp_string)
 
 
-def read_solution(filename: str, n: int) -> List[List[int]]:
-    with open(filename, 'r') as f:
-        tour = []
-        dimension = 0
-        started = False
-        for line in f:
-            if started:
-                loc = int(line)
-                if loc == -1:
-                    break
-                tour.append(loc)
-            if line.startswith("DIMENSION"):
-                dimension = int(line.split(" ")[-1])
+def read_routes_str(vrp_solution_str: str, num_nodes: int) -> List[List[int]]:
+    """Read VRP solution routes from string.
 
-            if line.startswith("TOUR_SECTION"):
-                started = True
+    Args:
+        vrp_solution_str: Input string.
+        num_nodes: Expected number of customers.
+    Return:
+        A list of lists representing the routes.
+    """
+    tour = []
+    # dimension = 0
+    started = False
+    for line in vrp_solution_str.splitlines():
+        if started:
+            loc = int(line)
+            if loc == -1:
+                break
+            tour.append(loc)
+        # if line.startswith('DIMENSION'):
+        #     dimension = int(line.split()[-1])
 
-    tour = np.array(tour).astype(int) - 1  # Subtract 1 as depot is 1 and should be 0
-    tour[tour > n] = 0  # Any nodes above the number of nodes there are is also depot
+        if line.startswith('TOUR_SECTION'):
+            started = True
+
+    # Subtract 1 as depot is 1 and should be 0
+    tour = np.array(tour).astype(int) - 1
+    # Any nodes above the number of nodes there are is also depot
+    tour[tour > num_nodes] = 0
     tour = tour[1:].tolist() + [0]
     return list([0] + t for t in split_after(tour, lambda x: x == 0))
+
+
+def read_routes(num_nodes: int, filename: str = '',
+                file=None) -> List[List[int]]:
+    """Read a VRP routes from file.
+
+    Args:
+        num_nodes: Expected number of customers.
+        filepath: Filename or path to read the instance from.
+        file: A filelike object to read from. If given, overrides
+            ``filepath``
+
+    Returns:
+        A list of lists representing the routes.
+    """
+    if file is None:
+        with open(filename, 'r') as fin:
+            routes_str = fin.read()
+    else:
+        routes_str = file.read()
+
+    return read_routes_str(routes_str, num_nodes)
+
 
 def write_solution(solution: VRPSolution, filename: str):
     with open(filename, 'w') as f:
