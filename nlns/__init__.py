@@ -84,3 +84,7 @@ def numpy_generator_from_rng(rng: random.Random) -> np.random.Generator:
         A numpy generator built from the state of input generator.
     """
     return np.random.default_rng(rng.getstate()[1])
+
+
+# Import here some modules for convenience
+from . import io                            # NOQA

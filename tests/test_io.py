@@ -3,10 +3,10 @@ from io import StringIO
 
 from helpers import get_filename
 from nlns.instances import VRPSolution, Route
-from nlns.utils.vrp_io import (read_vrp_str, read_vrp, write_vrp_str,
-                               write_vrp, read_routes_str, read_routes,
-                               read_solution, write_routes_str, write_routes,
-                               GRID_DIM)
+from nlns.io import (read_vrp_str, read_vrp, write_vrp_str,
+                     write_vrp, read_routes_str, read_routes,
+                     read_solution, write_routes_str, write_routes,
+                     GRID_DIM)
 
 
 INSTANCE_STRING = """NAME : instance
