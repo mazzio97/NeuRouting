@@ -4,6 +4,7 @@ from io import StringIO
 from helpers import get_filename
 from nlns.utils.vrp_io import (read_vrp_str, read_vrp, write_vrp_str,
                                write_vrp, read_routes_str, read_routes,
+                               read_solution,
                                GRID_DIM)
 
 
@@ -104,4 +105,16 @@ def test_read_routes(filename, num_nodes, routes):
     new_routes = read_routes(num_nodes, filename)
 
     for new_route, route in zip(new_routes, routes):
+        assert new_route == route
+
+
+@pytest.mark.parametrize('filename, instance_string, routes',
+                         [(get_filename('solution.sol'), INSTANCE_STRING,
+                           SOLUTION_ROUTES)])
+def test_read_solution(filename, instance_string, routes):
+    instance = read_vrp_str(instance_string)
+
+    solution = read_solution(instance, filename)
+
+    for new_route, route in zip(solution.routes, routes):
         assert new_route == route

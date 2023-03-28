@@ -4,7 +4,7 @@ from typing import List, Optional
 import numpy as np
 from more_itertools import split_after
 
-from nlns.instances import VRPInstance, VRPSolution
+from nlns.instances import VRPInstance, VRPSolution, Route
 
 
 GRID_DIM = 100000
@@ -173,9 +173,9 @@ def read_routes_str(vrp_solution_str: str, num_nodes: int) -> List[List[int]]:
     return list([0] + t for t in split_after(tour, lambda x: x == 0))
 
 
-def read_routes(num_nodes: int, filename: str = '',
+def read_routes(num_nodes: int, filepath: str = '',
                 file=None) -> List[List[int]]:
-    """Read a VRP routes from file.
+    """Read VRP routes from file.
 
     Args:
         num_nodes: Expected number of customers.
@@ -187,12 +187,34 @@ def read_routes(num_nodes: int, filename: str = '',
         A list of lists representing the routes.
     """
     if file is None:
-        with open(filename, 'r') as fin:
+        with open(filepath) as fin:
             routes_str = fin.read()
     else:
         routes_str = file.read()
 
     return read_routes_str(routes_str, num_nodes)
+
+
+def read_solution(instance: VRPInstance, filepath: str = '',
+                  file=None) -> VRPSolution:
+    """Instantiate a solution given an instance and a solution file.
+
+    Args:
+        instance: The instance for which the solution is loaded.
+            Solution files contain only routes informations, so that an
+            instance must be specified explicitly for them to be
+            interpretable.
+        filepath: Filename or path to read the instance from.
+        file: A filelike object to read from. If given, overrides
+            ``filepath``
+
+    Returns:
+        A solution populated with routes from the given file,
+        referencing ``instance``.
+    """
+    route_lists = read_routes(instance.n_customers, filepath, file)
+    routes = [Route(t, instance) for t in route_lists]
+    return VRPSolution(instance, routes)
 
 
 def write_solution(solution: VRPSolution, filename: str):
