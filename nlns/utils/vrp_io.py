@@ -241,12 +241,18 @@ def write_routes_str(solution: VRPSolution, grid_dim: int = GRID_DIM) -> str:
     return '\n'.join(lines)
 
 
-def write_solution(solution: VRPSolution, filename: str):
-    with open(filename, 'w') as f:
-        f.write(f"DIMENSION {GRID_DIM}\n")
-        f.write("TOUR_SECTION\n")
-        last = None
-        for tour in solution.routes:
-            for node in tour[:-1]:
-                f.write(f"{node + 1}\n")
-        f.write("-1\n")
+def write_routes(solution: VRPSolution, filepath: str = '', file=None,
+                 grid_dim: int = GRID_DIM):
+    """Write VRP solution routes to file.
+
+    Args:
+        solution: Input solution.
+        num_nodes: Expected number of customers.
+    """
+    solution_str = write_routes_str(solution, grid_dim)
+
+    if file is None:
+        with open(filepath) as fin:
+            fin.write(solution_str)
+    else:
+        file.write(solution_str)

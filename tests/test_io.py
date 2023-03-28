@@ -5,7 +5,7 @@ from helpers import get_filename
 from nlns.instances import VRPSolution, Route
 from nlns.utils.vrp_io import (read_vrp_str, read_vrp, write_vrp_str,
                                write_vrp, read_routes_str, read_routes,
-                               read_solution, write_routes_str,
+                               read_solution, write_routes_str, write_routes,
                                GRID_DIM)
 
 
@@ -130,3 +130,17 @@ def test_write_routes_str(solution_string, instance_string, routes):
     sol_string = write_routes_str(VRPSolution(instance, routes), GRID_DIM)
 
     assert sol_string.strip() == solution_string.strip()
+
+
+@pytest.mark.parametrize('solution_string, instance_string, routes',
+                         [(SOLUTION_STRING, INSTANCE_STRING,
+                           SOLUTION_ROUTES)])
+def test_write_routes(solution_string, instance_string, routes):
+    instance = read_vrp_str(instance_string, grid_dim=GRID_DIM)
+    buffer = StringIO()
+
+    routes = [Route(t, instance) for t in routes]
+    write_routes(VRPSolution(instance, routes), file=buffer)
+
+    buffer.seek(0)
+    assert buffer.read().strip() == solution_string.strip()
