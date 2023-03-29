@@ -3,9 +3,8 @@ import re
 from matplotlib import pyplot as plt
 
 import nlns
-import nlns.generators as generators
 # from nlns.environments import VRPSolver
-from nlns.instances import VRPInstance, VRPSolution
+from nlns.instances import VRPInstance, VRPSolution, generate_instance
 
 # Optional dependencies come later for practical reasons
 nlns.module_found('pyscipopt', __name__)
@@ -110,7 +109,7 @@ class SCIPSolver:
 
 
 if __name__ == "__main__":
-    inst = generators.generate_instance(n_customers=50)
+    inst = generate_instance(n_customers=50)
     scipsolver = SCIPSolver()
     sol = scipsolver.solve(inst, time_limit=180)
     sol.plot()

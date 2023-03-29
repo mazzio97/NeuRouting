@@ -4,7 +4,7 @@ from multiprocessing import Pool
 from typing import List
 
 import nlns
-from nlns.instances.vrp_solution import VRPSolution
+from nlns.instances import VRPSolution
 from nlns.operators import LNSOperator
 
 # Optional dependencies come later for practical reasons
