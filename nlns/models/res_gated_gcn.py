@@ -1,251 +1,119 @@
-from typing import Tuple, Union
-
 import torch
+import torch.nn.functional as F
 import torch.nn as nn
-import numpy as np
-import pytorch_lightning as pl
-import torch_geometric.nn as gnn
-from torch_geometric.data import Batch
-from torch_geometric.utils import unbatch, unbatch_edge_index, to_dense_adj
-from sklearn.utils.class_weight import compute_sample_weight
+from torch.utils.checkpoint import checkpoint
+
+from nlns.models.gcn_layers import ResidualGatedGCNLayer, MLP
 
 
-class TSPGCNLayer(gnn.MessagePassing):
-    def __init__(self, hidden_dim: int = 300):
+default_config = {
+    "node_dim": 3,
+    "voc_nodes_in": 2,
+    "voc_nodes_out": 2,
+    "voc_edges_in": 6,
+    "voc_edges_out": 2,
+    "hidden_dim": 300,
+    "num_layers": 30,
+    "mlp_layers": 3,
+    "aggregation": "mean"
+}
+
+
+class ResidualGatedGCNModel(nn.Module):
+    """Residual Gated GCN Model for outputting predictions as edge adjacency matrices.
+
+    References:
+        Paper: https://arxiv.org/pdf/1711.07553v2.pdf
+        Code: https://github.com/xbresson/spatial_graph_convnets
+    """
+
+    def __init__(self, config: dict = None):
+        super(ResidualGatedGCNModel, self).__init__()
+
+        if config is None:
+            config = default_config
+        else:
+            for key, value in default_config:
+                if key not in config:
+                    config[key] = value
+
+        # Define net parameters
+        self.node_dim = config['node_dim']
+        self.voc_nodes_in = config['voc_nodes_in']
+        self.voc_nodes_out = config['voc_nodes_out']
+        self.voc_edges_in = config['voc_edges_in']
+        self.voc_edges_out = config['voc_edges_out']
+        self.hidden_dim = config['hidden_dim']
+        self.num_layers = config['num_layers']
+        self.mlp_layers = config['mlp_layers']
+        self.aggregation = config['aggregation']
+        self.num_segments_checkpoint = config.get('num_segments_checkpoint', 0)
+        # Node and edge embedding layers/lookups
+        self.nodes_coord_embedding = nn.Linear(self.node_dim, self.hidden_dim // 2, bias=False)
+        # self.nodes_coord_embedding2 = nn.Linear(self.node_dim, self.hidden_dim, bias=False)
+        self.edges_values_embedding = nn.Linear(1, self.hidden_dim // 2, bias=False)
+        # self.edges_values_embedding2 = nn.Linear(1, self.hidden_dim, bias=False)
+        self.edges_embedding = nn.Embedding(self.voc_edges_in, self.hidden_dim // 2)
+        # self.edges_embedding2 = nn.Embedding(self.voc_edges_in, self.hidden_dim)
+        self.nodes_embedding = nn.Embedding(self.voc_nodes_in, self.hidden_dim // 2)
+        # self.nodes_embedding2 = nn.Embedding(self.voc_nodes_in, self.hidden_dim)
+        # Define GCN Layers
+        gcn_layers = []
+        for layer in range(self.num_layers):
+            gcn_layers.append(ResidualGatedGCNLayer(self.hidden_dim, self.aggregation))
+        self.gcn_layers = nn.ModuleList(gcn_layers)
+        # Define MLP classifiers
+        self.mlp_edges = MLP(self.hidden_dim, self.voc_edges_out, self.mlp_layers)
+        # self.mlp_nodes = MLP(self.hidden_dim, self.voc_nodes_out, self.mlp_layers)
+
+    def forward(self, x_edges, x_edges_values, x_nodes, x_nodes_coord, y_edges=None, edge_cw=None):
         """
-        GCN Layer for computing graph information as defined in [1].
-
-        [1] https://arxiv.org/pdf/1906.01227.pdf
         Args:
-            hidden_dim (int, optional): Node and edges embedded dimension. Defaults to 300.
-        """
-        super().__init__(aggr="sum")
-
-        # edge_U, edge_V, edge_W -> W_4, W_5, W_3 in equation (5)
-        self.edge_U = nn.Linear(hidden_dim, hidden_dim)
-        self.edge_V = nn.Linear(hidden_dim, hidden_dim)
-        self.edge_W = nn.Linear(hidden_dim, hidden_dim)
-
-        # edge_U, edge_V -> W_1, W_2 in equation (4)
-        self.node_U = nn.Linear(hidden_dim, hidden_dim)
-        self.node_V = nn.Linear(hidden_dim, hidden_dim)
-
-        self.batch_norm_edge = nn.BatchNorm1d(hidden_dim)
-        self.batch_norm_node = nn.BatchNorm1d(hidden_dim)
-
-    def forward(self, node_embedding: torch.Tensor, edge_embedding: torch.Tensor, edge_index: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Computes the forward pass on a batch of graphs.
-
-        Args:
-            node_embedding (torch.Tensor): 
-                Node information, embedded as explained in the reference paper.
-            edge_embedding (torch.Tensor): 
-                Edge information, embedded as explained in the reference paper.
-            edge_index (torch.Tensor): 
-                Tensor containing edge information on connected nodes.
+            x_edges: Input edge adjacency matrix (batch_size, num_nodes, num_nodes)
+            x_edges_values: Input edge distance matrix (batch_size, num_nodes, num_nodes)
+            x_nodes: Input nodes (batch_size, num_nodes)
+            x_nodes_coord: Input node coordinates (batch_size, num_nodes, node_dim)
+            y_edges: Targets for edges (batch_size, num_nodes, num_nodes)
+            edge_cw: Class weights for edges loss
+            # y_nodes: Targets for nodes (batch_size, num_nodes, num_nodes)
+            # node_cw: Class weights for nodes loss
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Tuple of node and edges.
+            y_pred_edges: Predictions for edges (batch_size, num_nodes, num_nodes)
+            # y_pred_nodes: Predictions for nodes (batch_size, num_nodes)
+            loss: Value of loss function
         """
-        # compute edge features
-        edge_gate = self.edge_W(edge_embedding) + \
-            self.edge_updater(edge_index, x=node_embedding)
-        edge_norm = torch.relu(self.batch_norm_edge(edge_gate))
-        edge_features = edge_embedding + edge_norm
+        # Node and edge embedding
+        x_vals = self.nodes_coord_embedding(x_nodes_coord)  # B x V x H
+        x_tags = self.nodes_embedding(x_nodes)
+        x = torch.cat((x_vals, x_tags), -1)
+        # x = self.nodes_embedding2(x_nodes)
+        e_vals = self.edges_values_embedding(x_edges_values.unsqueeze(3))  # B x V x V x H
+        e_tags = self.edges_embedding(x_edges)  # B x V x V x H
+        e = torch.cat((e_vals, e_tags), -1)
+        # e = self.edges_values_embedding2(x_edges_values.unsqueeze(3))
+        # GCN layers
+        if self.num_segments_checkpoint != 0:
+            layer_functions = [lambda args: layer(*args) for layer in self.gcn_layers]
+            x, e = torch.utils.checkpoint.checkpoint_sequential(layer_functions, self.num_segments_checkpoint, (x, e))
+        else:
+            for layer in range(self.num_layers):
+                # B x V x H, B x V x V x H
+                x, e = self.gcn_layers[layer](x, e)
+        # MLP classifier
+        y_pred_edges = self.mlp_edges(e)  # B x V x V x voc_edges_out
+        # y_pred_nodes = self.mlp_nodes(x)  # B x V x voc_nodes_out
 
-        # compute node features
-        node_gate = self.node_U(node_embedding) + \
-            self.propagate(edge_index, x=node_embedding, edge=edge_embedding)
-        node_norm = torch.relu(self.batch_norm_node(node_gate))
-        node_features = node_embedding + node_norm
+        # loss = loss_edges(y_pred_edges, y_edges, edge_cw)
+        # Edge loss
+        y = F.log_softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
+        # For some reason we must make things contiguous to prevent errors during backward
+        y_perm = y.permute(0, 3, 1, 2).contiguous()  # B x voc_edges x V x V
 
-        return node_features, edge_features
+        if y_edges is not None:
+            # Compute loss
+            loss = nn.NLLLoss(edge_cw)(y_perm, y_edges)
+        else:
+            loss = None
 
-    def edge_update(self, x_j: torch.Tensor, x_i: torch.Tensor) -> torch.Tensor:
-        """
-        Perform aggregation function on neighbouring nodes.
-        Partially computes the content of equation (5) in the reference paper.
-
-        Args:
-            x_j (torch.Tensor): "Left" neighbour node
-            x_i (torch.Tensor): "Right" neighbour node
-
-        Returns:
-            torch.Tensor: Computes the partial edge embeddings
-        """
-        return self.edge_U(x_j) + self.edge_U(x_i)
-
-    def message(self, 
-                x_j: torch.Tensor, 
-                x_i: torch.Tensor, 
-                edge: torch.Tensor, 
-                epsilon: float = 1e-20) -> torch.Tensor:
-        """
-        Compute the message that will be aggregated later.
-
-        Args:
-            x_j (torch.Tensor): Neighbour node
-            x_i (torch.Tensor): Central node
-            edge (torch.Tensor): Edge connecting the two nodes
-            epsilon (float, optional): Small epsilon value, used to prevent division by 0. Defaults to 1e-20.
-
-        Returns:
-            torch.Tensor: Computed message based on neighbour nodes.
-        """
-        sigma_edge = torch.sigmoid(edge)
-        
-        norm_factor = sigma_edge.sum(dim=0)
-        norm_factor += torch.full_like(norm_factor, 1e-20)
-        eta = sigma_edge / norm_factor
-
-        return eta * self.node_V(x_j)
-
-
-class ResGatedGCN(pl.LightningModule):
-    def __init__(self, 
-                 num_neighbors: int = 20,
-                 hidden_dim: int = 300, 
-                 mlp_layers: int = 3,
-                 gcn_layers: int = 30,
-                 initial_learning_rate: float = 0.001,
-                 learning_rate_decay_patience: int = 0, 
-                 compute_weights: bool = True):
-        """
-        Residual Gated GCN Model as explained in [1].
-
-        [1] https://arxiv.org/pdf/1906.01227.pdf
-
-        Args:
-            num_neighbors (int): Number of neighbors used to embed the instances.
-            hidden_dim (int, optional): 
-                Node and edges embedding dimension. Defaults to 300.
-            mlp_layers (int, optional): 
-                Number of mlp layers used for classification. Defaults to 3.
-            gcn_layers (int, optional): 
-                Number of convolution layers used for feature computation. Defaults to 30.
-            steps_per_epoch (int): Number of steps in an epoch for the LR scheduler. Defaults to 100.
-            compute_weights (bool): Compute class weights for balanced BCE. Defaults to True.
-        """
-        super().__init__()
-        self.save_hyperparameters()
-        self.num_neighbors = num_neighbors
-        self.initial_learning_rate = initial_learning_rate
-        self.learning_rate_decay_patience = learning_rate_decay_patience
-        self.compute_weights = compute_weights
-
-        self.node_embedding = nn.Linear(4, hidden_dim)
-        self.edge_distance_embedding = nn.Linear(1, hidden_dim // 2)
-        self.edge_type_embedding = nn.Linear(1, hidden_dim // 2)
-
-        self.gcn_layers = nn.ModuleList([
-            TSPGCNLayer(hidden_dim) for _ in range(gcn_layers)
-        ])
-
-        # define MLP layers as list of Linear layers with ReLU activation
-        # and last layer as classification layer with a sigmoid activation
-        self.mlp_layers = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ReLU()
-            )
-            for _ in range(mlp_layers - 1)
-        ])
-        self.classification = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
-        
-    def forward(self, data: Batch) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Forward pass on batch of graphs.
-
-        Args:
-            data (Data): Input graphs.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: 
-                Tuple containing predictions and loss value computed on the input
-                data.
-        """
-        node = self.node_embedding(data.x)
-        
-        # compute embedding on the distance (|E|, 1) and the type (|E|, 1)
-        edge_d = self.edge_distance_embedding(data.edge_attr[:, 0].reshape(-1, 1))
-        edge_t = self.edge_type_embedding(data.edge_attr[:, 1].reshape(-1, 1))
-        edge = torch.cat((edge_d, edge_t), dim=1)
-
-        for gcn_l in self.gcn_layers:
-            node, edge = gcn_l(node, edge, data.edge_index)
-
-        # compute the probability of an edge being in the final tour
-        for mlp_l in self.mlp_layers:
-            edge = mlp_l(edge)
-        pred = self.classification(edge)
-
-        # compute predicted adjacency matrix
-        pred_adj = to_dense_adj(data.edge_index, data.batch, pred.reshape(-1))
-        pred_adj = [split[0, :, :] for split in pred_adj.split(1)]
-
-        weights = None
-        if self.compute_weights:
-            cw = compute_sample_weight("balanced", y=data.y.cpu().numpy())
-            weights = torch.tensor(cw).to(pred.device).float()
-
-        loss = nn.functional.binary_cross_entropy(pred.reshape(-1), data.y, weight=weights)
-        return pred_adj, loss
-
-    def predict(self, data: Batch) -> Tuple[torch.Tensor, nn.BCELoss]:
-        """
-        Compute the heatmap of a graph.
-
-        Args:
-            data (Batch): The input graph, batched by torch_geometric.
-
-        Returns:
-            Tuple[torch.Tensor, nn.BCELoss]: Tuple containing the heatmap for each batch and the loss.
-        """
-        return self(data)
-
-    def training_step(self, data: Batch, batch_idx: int) -> nn.BCELoss:
-        """
-        Perform a training step.
-
-        Args:
-            data (Batch): Input data.
-            batch_idx (int): Batch index.
-
-        Returns:
-            Tuple[nn.BCELoss]: Loss produced by the heatmap model.
-        """
-        _, loss = self.predict(data)
-        self.log("train/loss", loss)
-        return loss
-
-    def validation_step(self, data: Batch, batch_idx: int) -> Tuple[nn.BCELoss]:
-        """
-        Perform a validation step.
-
-        Args:
-            data (Batch): Input data.
-            batch_idx (int): Batch index.
-
-        Returns:
-            Tuple[nn.BCELoss]: Loss produced by the heatmap model.
-        """
-        with torch.no_grad():
-            pred, loss = self.predict(data)
-        self.log("valid/loss", loss, batch_size=len(pred))
-        return loss
-
-    def configure_optimizers(self) -> torch.optim.Adam:
-        """
-        Instatiante the optimizer for the heatmap model.
-
-        Returns:
-            torch.optim.Adam: Optimizer instance.
-        """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.initial_learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.99, patience=0)
-        return [optimizer], [{ "scheduler": scheduler , 
-                               "monitor": "valid/loss", 
-                               "interval": "step", 
-                               "strict": False, 
-                               "frequency": self.trainer.val_check_interval * 5 }]
+        return y_pred_edges, loss
