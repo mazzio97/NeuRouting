@@ -24,8 +24,8 @@ from nlns.operators.destroy.heatmap import HeatmapDestroy
 
 vrp_actor_model = VRPActorModel()
 resgatedgcn_model = nn.DataParallel(ResidualGatedGCNModel())
-resgatedgcn_model.load_state_dict(torch.load('resgatedgcn100.zip',
-                                             map_location='cpu')['model_state_dict'])
+resgatedgcn_model.load_state_dict(
+    torch.load('resgatedgcn100.zip', map_location='cpu')['model_state_dict'])
 resgatedgcn_model.eval()
 
 
@@ -59,14 +59,6 @@ destroy_operators = [
             (RandomDestroy, 42),
             (TourDestroy, 42),
             (heatmap_destroy_factory, 42)
-        ]
-
-destroy_operators_reproducibility = [
-            (PointDestroy, 42),
-            (RandomDestroy, 42),
-            (TourDestroy, 42),
-            pytest.param(heatmap_destroy_factory, 42,
-                         marks=[pytest.mark.xfail])
         ]
 
 
@@ -145,7 +137,7 @@ class TestDestroy:
 
         assert all(solution.missing_customers() for solution in solutions)
 
-    @param_destroy(destroy_operators_reproducibility)
+    @param_destroy()
     def test_reproducibility(self, operator_type, seed, percentage,
                              complete_solutions,):           # NOQA
         operator = operator_type(percentage)

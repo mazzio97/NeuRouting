@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import nlns
 from nlns.operators import LNSOperator
 from nlns.operators.neural import TorchReproducibilityMixin
 from nlns.instances import VRPSolution
@@ -29,6 +30,8 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         self.edges_probs = None
         self.percentage = percentage
 
+        self.np_rng = nlns.numpy_generator_from_rng(self.rng)
+
     def set_random_state(self, seed: Optional[int]):
         """Set random state, enable reproducibility for torch model.
 
@@ -41,6 +44,7 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         """
         super().set_random_state(seed)
         self.init_torch_reproducibility(seed)
+        self.np_rng = nlns.numpy_generator_from_rng(self.rng)
 
     @staticmethod
     def plot_solution_heatmap(instance, sol_edges, sol_edges_probs):
@@ -59,8 +63,9 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         sol_edges_probs_norm = sol_edges_probs / sol_edges_probs.sum()
         n_edges = len(sol_edges)
         n_remove = int(n_edges * self.percentage)
-        to_remove_idx = np.random.choice(range(n_edges), size=n_remove,
-                                         p=sol_edges_probs_norm, replace=False)
+        to_remove_idx = self.np_rng.choice(range(n_edges), size=n_remove,
+                                           p=sol_edges_probs_norm,
+                                           replace=False)
         sol.destroy_edges(sol_edges[to_remove_idx])
 
     def remove_nodes(self, sol, sol_edges, sol_edges_probs):
@@ -68,9 +73,9 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         n_edges = len(sol_edges)
         n_nodes = sol.instance.n_customers + 1
         n_remove_nodes = int(n_nodes * self.percentage)
-        to_remove_edges = np.random.choice(range(n_edges), size=n_nodes,
-                                           p=sol_edges_probs_norm,
-                                           replace=False)
+        to_remove_edges = self.np_rng.choice(range(n_edges), size=n_nodes,
+                                             p=sol_edges_probs_norm,
+                                             replace=False)
         to_remove_idx = set()
         for e in to_remove_edges:
             for c in sol_edges[e]:
@@ -115,7 +120,7 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         return solutions
 
     def __call__(self, solutions: Sequence[VRPSolution]) -> List[VRPSolution]:
-        """Appluy the operator.
+        """Apply the operator.
 
         Args:
             solutions: Solutions to destroy.
