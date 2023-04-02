@@ -29,7 +29,8 @@ class VRPModelSCIP(Model):
         u = [self.addVar(vtype="C", name=f"u({i})", lb=1, ub=Q) for i in N]
 
         # Objective
-        self.setObjective(quicksum(x[i, j] * c[i, j] for (i, j) in x), sense='minimize')
+        self.setObjective(quicksum(x[i, j] * c[i, j] for (i, j) in x),
+                          sense='minimize')
 
         # Constraints
         for i in N:
@@ -40,11 +41,14 @@ class VRPModelSCIP(Model):
 
         for (i, j) in x:
             if i != 0 and j != 0:
-                self.addCons((u[i - 1] + q[j - 1]) * x[i, j] == u[j - 1] * x[i, j])
+                self.addCons((u[i - 1] + q[j - 1]) * x[i, j]
+                             == u[j - 1] * x[i, j])
 
         for (i, j) in x:
             if i != 0 and j != 0:
-                self.addCons(u[j - 1] >= u[i - 1] + q[j - 1] * x[i, j] - Q * (1 - x[i, j]))
+                self.addCons(
+                    u[j - 1]
+                    >= u[i - 1] + q[j - 1] * x[i, j] - Q * (1 - x[i, j]))
 
         for i in N:
             self.addCons(u[i - 1] >= q[i - 1])
@@ -52,8 +56,11 @@ class VRPModelSCIP(Model):
         self.data = x
         self.varname2var = {v.name: v for v in self.getVars() if 'x' in v.name}
 
-        heuristics = ['alns', 'rins', 'rens', 'dins', 'gins', 'clique', 'lpface', 'crossover', 'mutation',
-                      'vbounds', 'trustregion', 'localbranching'] if lns_only else None
+        heuristics = None
+        if lns_only:
+            heuristics = ['alns', 'rins', 'rens', 'dins', 'gins', 'clique',
+                          'lpface', 'crossover', 'mutation',
+                          'vbounds', 'trustregion', 'localbranching']
         self.select_heuristics(heuristics)
 
     def select_heuristics(self, heuristics=None):
@@ -72,18 +79,21 @@ class VRPModelSCIP(Model):
 
         # re-enable only the desired ones
         for h in heuristics:
-            self.setParam('heuristics/' + h + '/freq', frequency[h] if frequency[h] > 0 else 1)
+            self.setParam('heuristics/' + h + '/freq', frequency[h]
+                          if frequency[h] > 0 else 1)
 
     def set_solution(self, solution: VRPSolution):
         new_sol = self.createPartialSol()
         edges = solution.as_edges()
         for c1, c2 in self.data.keys():
-            self.setSolVal(new_sol, self.varname2var[f"x({c1}, {c2})"], 1 if (c1, c2) in edges else 0)
+            self.setSolVal(new_sol, self.varname2var[f"x({c1}, {c2})"],
+                           1 if (c1, c2) in edges else 0)
         self.addSol(new_sol)
 
     @staticmethod
     def vars_to_edges(edges_vars):
-        return [tuple([int(n) for n in re.findall(r'\d+', str(edge))]) for edge in edges_vars]
+        return [tuple([int(n) for n in re.findall(r'\d+', str(edge))])
+                for edge in edges_vars]
 
 
 class SCIPSolver:
@@ -95,22 +105,26 @@ class SCIPSolver:
         self.instance = instance
         self.model = VRPModelSCIP(instance, self.lns_only)
 
-    def solve(self, instance: VRPInstance, time_limit: int, max_steps=None) -> VRPSolution:
-        # assert max_steps is None, "SCIP does not provide any max iterations parameter"
+    def solve(self, instance: VRPInstance, time_limit: int,
+              max_steps=None) -> VRPSolution:
+        # assert max_steps is None, (
+        #     'SCIP does not provide any max iterations parameter')
         self.reset(instance)
         self.model.setParam("limits/time", time_limit)
         self.model.optimize()
         best_sol = self.model.getBestSol()
-        assignment = {var.name: self.model.getSolVal(best_sol, var) for var in self.model.getVars() if 'x' in var.name}
+        assignment = {var.name: self.model.getSolVal(best_sol, var)
+                      for var in self.model.getVars() if 'x' in var.name}
         edges_vars = [name for name, val in assignment.items() if val > 0.99]
         edges = self.model.vars_to_edges(edges_vars)
-        self.solution = VRPSolution.from_edges(instance=self.instance, edges=edges)
+        self.solution = VRPSolution.from_edges(instance=self.instance,
+                                               edges=edges)
         return self.solution
 
 
-if __name__ == "__main__":
-    inst = generate_instance(n_customers=50)
+if __name__ == '__main__':
+    inst = generate_instance(n_customers=50, seed=1)
     scipsolver = SCIPSolver()
-    sol = scipsolver.solve(inst, time_limit=180)
+    sol = scipsolver.solve(inst, time_limit=60)
     sol.plot()
     plt.show()

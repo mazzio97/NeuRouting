@@ -10,7 +10,7 @@ from nlns.operators import LNSOperator
 # Optional dependencies come later for practical reasons
 nlns.module_found('pyscipopt', __name__)
 from pyscipopt import Model                                 # NOQA
-from nlns.baselines.scip_solver import VRPModelSCIP         # NOQA
+from nlns.baselines.scip import VRPModelSCIP                # NOQA
 
 
 class SCIPRepair(LNSOperator):
