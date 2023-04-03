@@ -3,6 +3,7 @@ from typing import List, Sequence, Optional
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
@@ -135,6 +136,28 @@ class HeatmapDestroy(TorchReproducibilityMixin, LNSOperator):
         ckpt = torch.load(ckpt_path, map_location=self.device)
         self.model.load_state_dict(ckpt['model_state_dict'])
         self.model.eval()
+
+    @classmethod
+    def from_checkpoint(cls, percentage: float, ckpt_path: str,
+                        **kwargs) -> 'HeatmapDestroy':
+        """Instatiate the operator from a pretrained model.
+
+        Model architecture is considered to be standard (
+            :attr:`nlns.models.res_gated_gcn.default_config`).
+
+        Keyword arguments are passed to the constructor. See
+        :class:`HeatmapDestroy` or :meth:`__init__` specifications.
+
+        Args:
+            ckpt_path: Path to the model checkpoint.
+
+        Returns:
+            The instatiated operator.
+        """
+        operator = cls(percentage, nn.DataParallel(ResidualGatedGCNModel()),
+                       **kwargs)
+        operator.load_model(ckpt_path)
+        return operator
 
     def features(self, instances):
         edges = np.stack([inst.adjacency_matrix(self.num_neighbors)

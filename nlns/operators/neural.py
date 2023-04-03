@@ -1,7 +1,9 @@
+import abc
 import time
 import contextlib
+import warnings
 from math import ceil
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from copy import deepcopy
 
 import numpy as np
@@ -12,29 +14,53 @@ from tqdm.auto import tqdm
 
 from nlns.models import RLAgentSolution
 from nlns.operators.initial import nearest_neighbor_solution
+from nlns.operators import LNSOperator
 from nlns.utils.logging import Logger, EmptyLogger
 
 
-# class NeuralProcedure:
-#     def __init__(self, model: nn.Module, device: str = "cpu", logger: Optional[Logger] = None):
-#     self.model = model.to(device)
-#     self.device = device
-#     self.logger = logger
-#     self.val_env = None
-#     self._val_phase = False
+class Trainable(abc.ABC):
+    """Interface for trainable operators.
+
+    Implementing this in an operator is necessary in order for said
+    operator to be used with :class:`NLNSTrainer`. This is particularly
+    useful for operators whose train procedure is highly correlated to
+    the large neighborhood search environment.
+    """
+
+    def init_train(self):
+        """Initialize training (e.g. optimizers, statistics, etc)."""
+
+    @abc.abstractmethod
+    def training_step(self, batch):
+        """Train step on a given batch."""
+
+    @abc.abstractmethod
+    def training_info(self, epoch, batch_idx,
+                      log_interval) -> Dict[str, float]:
+        """Return train statistics (e.g. loss, reward, etc.)."""
+
+    def save(self, path, epoc, batch_idx):
+        """Save current checkpoint."""
+        warnings.warn('Saving was not implemented for this operator '
+                      f'({self.__name__})')
 
 
-class NeuralProcedurePair:
-    """
-    A neural procedure pair is used to train one (or two) neural procedure(s).
-    This is done by providing a repair and a destroy procedure.
-    Either one or the other procedures needs to be neural based.
-    """
-    def __init__(self, destroy_procedure, repair_procedure):
-        self.destroy_procedure = destroy_procedure
-        self.destroy_is_neural = False
-        self.repair_procedure = repair_procedure
-        self.repair_is_neural = True
+class NLNSTrainer:
+    """"""
+
+    def __init__(self, destroy_operator: Union[Trainable, LNSOperator],
+                 repair_operator: Union[Trainable, LNSOperator]):
+        self.destroy_trainable = isinstance(destroy_operator, Trainable)
+        self.repair_trainable = isinstance(repair_operator, Trainable)
+
+        if not self.repair_trainable and not self.destroy_trainable:
+            raise TypeError('At least one of the given operators must '
+                            'be trainable (implement Trainable). '
+                            f'{destroy_operator} and {repair_operator} '
+                            'are not.')
+
+        self.destroy_operator = destroy_operator
+        self.repair_operator = repair_operator
 
     def _evaluate(self, data: DataLoader, batch_size: int) -> Dict:
         """
@@ -50,6 +76,10 @@ class NeuralProcedurePair:
                     "incumbent_solution": Mean score of solutions found by the neural operator
                     "time": Time taken to compute the solution
         """
+        # TODO: set operators into valid mode for evaluation.
+        # If we don't want to assume that `model` is a torch module inside
+        # the operator, maybe add train() and eval() methods to the Trainable
+        # interface.
         start_time = time.time()
 
         validation_solutions = [
@@ -67,8 +97,8 @@ class NeuralProcedurePair:
             for i in range(n_batches):
                 begin = i * batch_size
                 end = min((i + 1) * batch_size, n_solutions)
-                self.destroy_procedure(validation_solutions[begin:end])
-                self.repair_procedure(validation_solutions[begin:end])
+                self.destroy_operator(validation_solutions[begin:end])
+                self.repair_operator(validation_solutions[begin:end])
 
             for i in range(n_solutions):
                 cost = validation_solutions[i].cost
@@ -81,6 +111,56 @@ class NeuralProcedurePair:
         return {"mean_cost": np.mean(costs),
                 "time": time.time() - start_time}
 
+    def init_train(self):
+        """Initialize training of given operators, if trainable."""
+        if self.destroy_trainable:
+            self.destroy_operator.init_train()
+
+        if self.repair_trainable:
+            self.repair_operator.init_train()
+
+    def training_step(self, batch):
+        """Compute a train step for the operators, if trainable."""
+        if self.destroy_trainable:
+            self.destroy_operator.training_step(batch)
+        else:
+            self.destroy_operator(batch)
+
+        if self.repair_trainable:
+            self.repair_operator.training_step(batch)
+        else:
+            self.repair_operator(batch)
+
+    def training_info(self, epoch, batch_idx, log_interval) -> Dict:
+        """Retrieve train info from given operators.
+
+        Returns:
+            A dict in the form::
+
+                {'destroy/param1': {...}, 'destroy/param2': {...},
+                 'repair/param1': {...}, ...}
+
+            Each key will be present only if the corresponding operator
+            is trainable.
+        """
+        info = {}
+
+        if self.destroy_trainable:
+            destroy_info = self.destroy_operator.training_info(
+                epoch, batch_idx, log_interval)
+
+            for key, value in destroy_info.items():
+                info[f'destroy/{key}'] = value
+
+        if self.repair_trainable:
+            repair_info = self.repair_operator.training_info(
+                epoch, batch_idx, log_interval)
+
+            for key, value in repair_info.items():
+                info[f'repair/{key}'] = value
+
+        return info
+
     def train(self,
               train: DataLoader,
               epochs: int = 1,
@@ -89,13 +169,13 @@ class NeuralProcedurePair:
               val_interval: int = None,
               val_batch_size: int = 1,
               log_interval: int = None,
+              initial_solution_fn=nearest_neighbor_solution,
               logger: Logger = EmptyLogger()):
-        """
-        Train the neural procedur pair by both destroy and repair, when needed.
+        """Train the operators in a LNS-like environment.
 
-        WIP: currently subject to changes to make the repair neural
-        operator working again. In order to train the destroy operator,
-        see train_destroy.py.
+        This mimics the work of `[Huttong & Tierney] <https://doi.org/10.48550/arXiv.1911.09539>`_.
+
+        TODO: Add verbosity options
 
         Args:
             train (DataLoader): Training data.
@@ -106,64 +186,43 @@ class NeuralProcedurePair:
             val_batch_size (int, optional): Validation batch size. Defaults to 1.
             log_interval (int, optional): number of steps between logging messages. Defaults to None.
             logger (Logger, optional): Logger. Defaults to EmptyLogger().
-        """
-        logger.new_run(f'{type(self.destroy_procedure).__name__}-'
-                       f'{type(self.repair_procedure).__name__}')
+        """                 # NOQA
+        logger.new_run(f'{type(self.destroy_operator).__name__}-'
+                       f'{type(self.repair_operator).__name__}')
 
         can_evaluate = validation is not None and val_interval is not None
         start_time = time.time()
 
-        if self.destroy_is_neural:
-            self.destroy_procedure._init_train()
-        if self.repair_is_neural:
-            self.repair_procedure._init_train()
+        self.init_train()
 
         # Pregenerate initial solutions
-        initial_solutions = [
-            RLAgentSolution.from_solution(
-                nearest_neighbor_solution(inst))
-            for inst in train]
+        initial_solutions = [initial_solution_fn(inst)
+                             for inst in train]
 
-        for epoch in tqdm(range(epochs), desc="Training epoch"):
+        for epoch in tqdm(range(epochs), desc='Training epoch'):
             for batch_idx, batch in tqdm(
                 enumerate(chunked(initial_solutions, batch_size)),
-                desc="Training batch",
+                desc='Training batch',
                 leave=False,
-                total=len(initial_solutions) // batch_size):
+                    total=len(initial_solutions) // batch_size):
 
                 # batch = [deepcopy(s) for s in batch]
                 batch_costs = [s.cost for s in batch]
                 mean_batch_cost = sum(batch_costs) / len(batch_costs)
 
-                # Training depends on the procedures configuration:
-                # if we are training a destroy procedure and the repair is not
-                # neural then we only need to take that into account
-                # if we are training both a destroy
-                # procedure and a repair procedure then we need to take
-                # care of the fact that the training procedure is performed
-                # using Reinforcement Learning and hence the global loss
-                # is the one obtained from the repair operator.
-                if self.destroy_is_neural:
-                    pred, loss, info = self.destroy_procedure._train_step(batch)
-                else:
-                    self.destroy_procedure(batch)
-                    pred = batch
+                # Batch is updated inline
+                self.training_step(batch)
 
-                if self.repair_is_neural:
-                    # turn batch back into PyG format as destroy procedure
-                    # outputs a list of VRPSolution
-                    self.repair_procedure._train_step(pred)
-                else:
-                    pred = self.repair_procedure(pred)
-
-                repaired_costs = [p.cost for p in pred]
+                repaired_costs = [p.cost for p in batch]
                 mean_repaired_cost = sum(repaired_costs) / len(repaired_costs)
 
                 if can_evaluate and batch_idx % val_interval == 0:
-                    evaluation_results = self._evaluate(validation, batch_size=val_batch_size)
-                    evaluation_results["epoch"] = epoch
-                    evaluation_results["epoch_step"] = batch_idx
-                    logger.log(evaluation_results, "validation")
+                    evaluation_results = self._evaluate(
+                        validation,
+                        batch_size=val_batch_size)
+                    evaluation_results['epoch'] = epoch
+                    evaluation_results['epoch_step'] = batch_idx
+                    logger.log(evaluation_results, 'validation')
 
                 if log_interval is not None and batch_idx % log_interval == 0:
                     log_dict = {
@@ -171,26 +230,13 @@ class NeuralProcedurePair:
                         'incumbent_solution': mean_repaired_cost
                     }
 
-                    if self.destroy_is_neural:
-                        log_dict.update(
-                            self.destroy_procedure._train_info(
-                                epoch, batch_idx, log_interval))
-
-                    if self.repair_is_neural:
-                        log_dict.update(
-                            self.repair_procedure._train_info(
-                                epoch, batch_idx, log_interval))
+                    log_dict.update(self.training_info(epoch, batch_idx,
+                                                       log_interval))
 
                     logger.log(log_dict, 'train')
-                    # logger.log({
-                    #     "target_solution": mean_batch_cost,
-                    #     "incumbent_solution": mean_repaired_cost,
-                    #     "time": "NA",
-                    #     "epoch": epoch,
-                    #     "epoch_step": batch_idx,
-                    # }, "training")
 
-        print(f"Training completed successfully in {time.time() - start_time} seconds.")
+        print('Training completed successfully in '
+              f'{time.time() - start_time} seconds.')
 
 
 class TorchReproducibilityMixin:

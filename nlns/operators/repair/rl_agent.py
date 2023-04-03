@@ -1,3 +1,4 @@
+import contextlib
 from typing import Sequence, Optional
 
 import torch
@@ -7,12 +8,24 @@ import torch.nn.functional as F
 from torch import optim
 
 from nlns.operators import LNSOperator
-from nlns.operators.neural import TorchReproducibilityMixin
+from nlns.operators.neural import TorchReproducibilityMixin, Trainable
 from nlns.instances import VRPSolution
 from nlns.models import VRPActorModel, VRPCriticModel, RLAgentSolution
 
 
-class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
+@contextlib.contextmanager
+def as_rlagent(solutions):
+    neural_solutions = [RLAgentSolution.from_solution(solution)
+                        for solution in solutions]
+
+    try:
+        yield neural_solutions
+    finally:
+        for solution, neural in zip(solutions, neural_solutions):
+            solution.routes = neural.routes
+
+
+class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
     """Repair solutions by applying a deep reinforcement learning model.
 
     The model is an actor critic attention based approach, as defined
@@ -95,7 +108,7 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
 
         return solutions
 
-    def _init_train(self):
+    def init_train(self):
         self.actor_optim = optim.Adam(self.model.parameters(), lr=1e-4)
         self.model.train()
         self.critic_optim = optim.Adam(self.critic.parameters(), lr=5e-4)
@@ -105,10 +118,10 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
         self.rewards = []
         self.diversity_values = []
 
-    def _train_step(self, train_batch):
-        # opposite_procedure.multiple(train_batch)
+    def training_step(self, train_batch):
         costs_destroyed = [solution.cost for solution in train_batch]
-        _, tour_logp, critic_est = self.call(train_batch)
+        with as_rlagent(train_batch) as rlagent_batch:
+            _, tour_logp, critic_est = self.call(rlagent_batch)
         costs_repaired = [solution.cost for solution in train_batch]
 
         # Reward/Advantage computation
@@ -135,7 +148,7 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
         self.losses_actor.append(torch.mean(actor_loss.detach()).item())
         self.losses_critic.append(torch.mean(critic_loss.detach()).item())
 
-    def _train_info(self, epoch, batch_idx, log_interval):
+    def training_info(self, epoch, batch_idx, log_interval):
         mean_loss = np.mean(self.losses_actor[-log_interval:])
         mean_critic_loss = np.mean(self.losses_critic[-log_interval:])
         mean_reward = np.mean(self.rewards[-log_interval:])
@@ -145,13 +158,16 @@ class RLAgentRepair(TorchReproducibilityMixin, LNSOperator):
                 "actor_loss": mean_loss,
                 "critic_loss": mean_critic_loss}
 
-    def _ckpt_info(self, epoch, batch_idx) -> dict:
+    def checkpoint(self, epoch, batch_idx) -> dict:
         return {"epoch": epoch + 1,
                 "batch_idx": batch_idx + 1,
                 "parameters": self.model.state_dict(),
                 "actor_optim": self.actor_optim.state_dict(),
                 "critic": self.critic.state_dict(),
                 "critic_optim": self.critic_optim.state_dict()}
+
+    def save(self, path: str, epoch, batch_idx):
+        torch.save(self.checkpoint(epoch, batch_idx), path)
 
     def _actor_model_forward(self, incomplete_solutions, static_input,
                              dynamic_input, vehicle_capacity):
