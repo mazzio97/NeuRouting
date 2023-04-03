@@ -13,7 +13,7 @@ from nlns.instances import generate_instances
 
 def main(args: argparse.Namespace):
     if args.seed is not None:
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=True)
         torch.manual_seed(args.seed)
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'

@@ -277,7 +277,7 @@ class TorchReproducibilityMixin:
 
         with torch.random.fork_rng() as fork:
             torch.set_rng_state(self.torch_rng_state)
-            torch.use_deterministic_algorithms(True)
+            torch.use_deterministic_algorithms(True, warn_only=True)
             try:
                 yield [fork]
             finally:
