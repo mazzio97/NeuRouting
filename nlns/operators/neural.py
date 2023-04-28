@@ -82,6 +82,8 @@ class NLNSTrainer:
         # interface.
         start_time = time.time()
 
+        self.repair_operator.model.eval()
+
         validation_solutions = [
             nearest_neighbor_solution(instance) for
             instance in data]
@@ -106,6 +108,8 @@ class NLNSTrainer:
                     validation_solutions[i] = backup_copies[i]
                 else:
                     costs[i] = cost
+
+        self.repair_operator.model.train()
 
         return {"mean_cost": np.mean(costs),
                 "time": time.time() - start_time}
