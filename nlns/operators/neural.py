@@ -83,8 +83,7 @@ class NLNSTrainer:
         start_time = time.time()
 
         validation_solutions = [
-            RLAgentSolution.from_solution(
-                nearest_neighbor_solution(instance)) for
+            nearest_neighbor_solution(instance) for
             instance in data]
         costs = [solution.cost for solution in validation_solutions]
 
