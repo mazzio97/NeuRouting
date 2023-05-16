@@ -1,3 +1,4 @@
+import sys
 from abc import ABC, abstractmethod
 from typing import List, Callable, Optional, Union, Sequence
 
@@ -138,7 +139,8 @@ class BaseLargeNeighborhoodSearch(ABC):
     def search(self,
                instance_or_solution: Union[VRPInstance, VRPSolution],
                neighborhood_size: int = 100,
-               max_time: float = 300) -> VRPSolution:
+               max_time: float = 300,
+               max_iterations: Optional[int] = None) -> VRPSolution:
         """Search for a solution using LNS search.
 
         Args:
@@ -148,6 +150,8 @@ class BaseLargeNeighborhoodSearch(ABC):
                 Defaults to 100.
             max_time: Maximum time allowed for the search in seconds.
                 Defaults to 5 minutes (300s).
+            max_iterations: Maximum number of iterations allowed for the
+                search. Defaults to no limit (``None``).
 
         Returns:
             VRPSolution: Best solution found in the specified time.
@@ -160,7 +164,12 @@ class BaseLargeNeighborhoodSearch(ABC):
         overall_best = current_best
         self._history.append(overall_best)
 
-        while (time() - initial_time) < max_time:
+        if max_iterations is None:
+            max_iterations = sys.maxsize
+        iterations = 0
+
+        while ((time() - initial_time) < max_time
+               and iterations < max_iterations):
             N = self.neighborhood(current_best, neighborhood_size)
 
             iteration_start = time()
@@ -179,6 +188,8 @@ class BaseLargeNeighborhoodSearch(ABC):
                     self.better_solution_found(overall_best, N_best)
                     overall_best = current_best
                     self._history.append(overall_best)
+
+            iterations += 1
 
         overall_best.time_taken = time() - initial_time
         return overall_best
