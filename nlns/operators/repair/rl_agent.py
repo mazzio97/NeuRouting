@@ -169,6 +169,24 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
     def save(self, path: str, epoch, batch_idx):
         torch.save(self.checkpoint(epoch, batch_idx), path)
 
+    @classmethod
+    def from_checkpoint(cls, path: str, device: str) -> 'RLAgentRepair':
+        """Load operator from model checkpoint.
+
+        Obtained through :meth:`save`.
+        """
+        checkpoint = torch.load(path, map_location=device)
+        model = VRPActorModel(device=device)
+        model.load_state_dict(checkpoint['parameters'])
+        critic = VRPCriticModel()
+        critic.load_state_dict(checkpoint['critic'])
+
+        operator = cls(model, device=device)
+        operator.actor_optim.load_state_dict(checkpoint['actor_optim'])
+        operator.critic_optim.load_state_dict(checkpoint['critic_optim'])
+
+        return operator
+
     def _actor_model_forward(self, incomplete_solutions, static_input,
                              dynamic_input, vehicle_capacity):
         batch_size = static_input.shape[0]
