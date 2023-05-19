@@ -108,8 +108,8 @@ def main(namespace: Namespace):
     repair_operator_map = {
         'scip': lambda: SCIPRepair(),
         'greedy': lambda: GreedyRepair(),
-        'neural': lambda: RLAgentRepair.from_checkpoint(rlagent_checkpoint,
-                                                        device)
+        'rlagent': lambda: RLAgentRepair.from_checkpoint(rlagent_checkpoint,
+                                                         device)
     }
 
     instances = tuple(generate_instances(namespace.instances,
@@ -117,7 +117,7 @@ def main(namespace: Namespace):
                                          seed=namespace.instances_seed))
 
     destroy_operator = destroy_operator_map[namespace.destroy](
-        namespace.destruction_percentage)
+        namespace.destroy_percentage)
     repair_operator = repair_operator_map[namespace.repair]()
 
     # Get a sequence of independent seeds from the given runs_seed
