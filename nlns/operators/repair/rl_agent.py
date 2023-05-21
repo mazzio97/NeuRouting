@@ -181,7 +181,7 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
         critic = VRPCriticModel()
         critic.load_state_dict(checkpoint['critic'])
 
-        operator = cls(model, device=device)
+        operator = cls(model, critic, device=device)
         operator.init_train()
         operator.actor_optim.load_state_dict(checkpoint['actor_optim'])
         operator.critic_optim.load_state_dict(checkpoint['critic_optim'])
