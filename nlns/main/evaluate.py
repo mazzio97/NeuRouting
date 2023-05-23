@@ -114,6 +114,7 @@ def main(namespace: Namespace):
 
     instances = tuple(generate_instances(namespace.instances,
                                          namespace.customers,
+                                         distribution=namespace.distribution,
                                          seed=namespace.instances_seed))
 
     destroy_operator = destroy_operator_map[namespace.destroy](
