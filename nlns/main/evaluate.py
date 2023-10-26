@@ -189,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--statistics-path', dest='statistics_path')
 
     parser.add_argument('--distribution', dest='distribution')
-    parser.add_argument('--instances', dest='instances')
+    parser.add_argument('--instances', dest='instances', type=int)
     parser.add_argument('--instances-seed', dest='instances_seed', type=int)
 
     parser.add_argument('--runs', dest='runs', type=int)
