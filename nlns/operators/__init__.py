@@ -56,3 +56,33 @@ class LNSOperator(ABC):
             Repaired or destroyed solutions, following the indexing of
                 the input ones.
         """
+
+
+class ChainedLNSOperator(LNSOperator):
+    """Chain multiple operators so that they are applied sequentially.
+
+    Ideal for operators which only perform a partial repair or destroy.
+    In practice, it mostly suits destroy operators.
+    """
+
+    def __init__(self, operators: Sequence[LNSOperator]):
+        self.operators = operators
+
+    def set_random_state(self, seed: nlns.RandomSeedOrState):
+        """Set internal random state for reproducible results.
+
+        Sets random state of all internal operators.
+
+        Args:
+            seed: Random seed or state (see :func:`nlns.get_rng`).
+        """
+        for operator in self.operators:
+            operator.set_random_state(seed)
+
+    def __call__(self,
+                 solutions: Sequence[VRPSolution]) -> Sequence[VRPSolution]:
+        """Apply internal operators in order to all the given solutions."""
+        for operator in self.operators:
+            solutions = operator(solutions)
+
+        return solutions
