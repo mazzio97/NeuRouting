@@ -1,7 +1,7 @@
 import sys
 from abc import ABC, abstractmethod
-from typing import List, Callable, Optional, Union, Sequence
-
+from typing import List, Callable, Optional, Union, Sequence, Dict
+from collections import deque
 from time import time
 from copy import deepcopy
 from more_itertools import minmax
@@ -33,7 +33,24 @@ class BaseLargeNeighborhoodSearch(ABC):
                  initial_solution_fn: Optional[Callable[[VRPInstance],
                                                         VRPSolution]] = None):
         self._initial_solution_fn = initial_solution_fn
-        self._history = list()
+        # History is a dictionary of sequences, each sequence is logging
+        # a different feature (for now: time, solution cost)
+        # TODO: generalize history in the following ways?
+        # - accept a number of iterations (or seconds) to "skip"
+        # before logging history, so that not everything is logged
+        # all the time.
+        # - accept different "kinds" of history, e.g. decide if you
+        # want to save iteration number, current time, best solution,
+        # etc.
+        # Possible design: history strategy is given in the form
+        # of objects, with a "log" method. This method accepts the
+        # current LNS obects so that they extract whatever they
+        # want. However, to do so it is necessary to save more info
+        # to self (e.g. start time of the run, current iteration,
+        # current best, etc.).
+        # For now, let's just keep track of simple statistics instead
+        # of saving entire solutions.
+        self._history = {}
         self._iteration_durations = list()
 
     def initial_solution(self, instance_or_solution:
@@ -156,13 +173,17 @@ class BaseLargeNeighborhoodSearch(ABC):
         Returns:
             VRPSolution: Best solution found in the specified time.
         """
-        self._history = []
+        time_history = deque()
+        cost_history = deque()
+        self._history = {'time': time_history, 'cost': cost_history}
+
         self._iteration_durations = []
         initial_time = time()
 
         current_best = self.initial_solution(instance_or_solution)
         overall_best = current_best
-        self._history.append(overall_best)
+        time_history.append(0.)
+        cost_history.append(current_best.cost)
 
         if max_iterations is None:
             max_iterations = sys.maxsize
@@ -187,19 +208,21 @@ class BaseLargeNeighborhoodSearch(ABC):
                 if current_best.cost < overall_best.cost:
                     self.better_solution_found(overall_best, N_best)
                     overall_best = current_best
-                    self._history.append(overall_best)
 
             iterations += 1
+
+            time_history.append(time() - initial_time)
+            cost_history.append(current_best.cost)
 
         overall_best.time_taken = time() - initial_time
         return overall_best
 
     @property
-    def history(self) -> List[VRPSolution]:
+    def history(self) -> Dict[str, List]:
         """Retrieve history of the search.
 
         Returns:
-            List[VRPSolution]: History of solutions progress
+            Dict[List]: History of solutions progress
         """
         return self._history
 
