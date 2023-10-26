@@ -1,5 +1,6 @@
 import copy
 from operator import attrgetter
+from functools import partial
 
 import pytest
 
@@ -9,7 +10,7 @@ from helpers import (set_default_rng, empty_solutions, skipif_module,   # NOQA
                      MissingPlaceholder, complete_solutions)
 from context import nlns
 
-from nlns.operators import LNSOperator
+from nlns.operators import LNSOperator, ChainedLNSOperator
 from nlns.operators.repair import GreedyRepair
 from nlns.operators.repair.rl_agent import RLAgentRepair
 from nlns.models import VRPActorModel, ResidualGatedGCNModel
@@ -37,8 +38,14 @@ def heatmap_destroy_factory(percentage):
     return HeatmapDestroy(percentage, resgatedgcn_model)
 
 
+def chain_destroy_factory(percentage):
+    return ChainedLNSOperator([PointDestroy(percentage / 2),
+                               RandomDestroy(percentage / 2)])
+
+
 rlagent_repair_factory.__name__ = 'RLAgentRepair'
 heatmap_destroy_factory.__name__ = 'HeatmapDestroy'
+chain_destroy_factory.__name__ = 'ChainedDestroy(point+random)'
 
 repair_operators = [
             (GreedyRepair, 42),
@@ -58,7 +65,8 @@ destroy_operators = [
             (PointDestroy, 42),
             (RandomDestroy, 42),
             (TourDestroy, 42),
-            (heatmap_destroy_factory, 42)
+            (heatmap_destroy_factory, 42),
+            (chain_destroy_factory, 42)
         ]
 
 
