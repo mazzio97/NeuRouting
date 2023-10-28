@@ -8,12 +8,13 @@ import contextlib
 import json
 import sys
 import os.path
-from typing import Iterable, List, TextIO, Union
+from typing import Iterable, List, TextIO, Union, Tuple
 # from statistics import mean
 from operator import attrgetter
 
 import numpy as np
 import torch
+import pandas as pd
 
 from nlns.operators.initial import nearest_neighbor_solution
 from nlns.operators.destroy import PointDestroy, TourDestroy, RandomDestroy
@@ -37,6 +38,7 @@ class Namespace:
 
     # Saving
     raw_path: Union[str, TextIO, None] = sys.stdout
+    history_path: Union[str, TextIO, None] = sys.stdout
     statistics_path: Union[str, TextIO, None] = sys.stdout
 
     # Instance generation
@@ -56,16 +58,28 @@ class Namespace:
 
 def evaluate(search: BaseLargeNeighborhoodSearch,
              instances: Iterable[VRPInstance],
-             **kwargs) -> List[VRPSolution]:
-    """Run a search on the given instances."""
+             **kwargs) -> Tuple[List[VRPSolution], pd.DataFrame]:
+    """Run a search on the given instances.
+
+    History for each instance is returned in a ``pandas.DataFrame``.
+    """
     solutions = []
+
+    dataframes: List[pd.DataFrame] = []
 
     for i, instance in enumerate(instances):
         print('Solving instance', i)
         solution = search.search(instance, **kwargs)
         solutions.append(solution)
 
-    return solutions
+        instance_history = search.history
+        instance_history['instance'] = i
+        instance_df = pd.DataFrame(instance_history)
+        # Save some memory
+        instance_df['cost'] = instance_df['cost'].astype(np.float32)
+
+        dataframes.append(instance_df)
+    return solutions, pd.concat(dataframes)
 
 
 def rlagent_checkpoint_name(destroy: str, repair: str,
@@ -134,6 +148,7 @@ def main(namespace: Namespace):
     # statistics
     results: List[List[float]] = [None] * namespace.runs
 
+    run_dataframes = []
     for run_index, run_seed in enumerate(run_seeds):
         print('new run, entropy:', run_seed)
         destroy_operator.set_random_state(run_seed)
@@ -142,7 +157,7 @@ def main(namespace: Namespace):
         search = LNS(destroy_operator, repair_operator,
                      nearest_neighbor_solution)
 
-        solutions = evaluate(
+        solutions, run_dataframe = evaluate(
             search,
             instances,
             neighborhood_size=namespace.neighborhood_size,
@@ -152,6 +167,10 @@ def main(namespace: Namespace):
         # Discard the solutions in favor of their costs
         results[run_index] = list(map(attrgetter('cost'), solutions))
 
+        # Gather dataframes from each run
+        run_dataframe['seed'] = run_seed
+        run_dataframes.append(run_dataframe)
+
     # Create a matrix R x N where R is the number of runs and N the
     # number of instances. Element r, n is the cost of the solution of
     # the n-th instance as computed by the r-th run.
@@ -159,6 +178,10 @@ def main(namespace: Namespace):
     results_matrix = np.array(results)
     if namespace.raw_path is not None:
         np.savetxt(namespace.raw_path, results_matrix)
+
+    # Optionally save history
+    if namespace.history_path is not None:
+        pd.concat(run_dataframes).to_parquet(namespace.history_path)
 
     # Optionally save higher level statistics as well
     means = results_matrix.mean(-1)     # Average each run
@@ -186,6 +209,7 @@ if __name__ == '__main__':
                         type=float, required=True)
 
     parser.add_argument('--raw-path', dest='raw_path')
+    parser.add_argument('--history-path', dest='history_path')
     parser.add_argument('--statistics-path', dest='statistics_path')
 
     parser.add_argument('--distribution', dest='distribution')
