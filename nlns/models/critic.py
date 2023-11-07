@@ -31,7 +31,7 @@ class VRPCriticModel(nn.Module):
         input = torch.cat((static_input.permute(0, 2, 1), dynamic_input_float.permute(0, 2, 1)), dim=1)
         hidden_1 = self.encoder(input)
         hidden_2 = self.encoder_2(input)
-        static_sum = torch.tanh(torch.sum(hidden_2, 2).squeeze())
+        static_sum = torch.tanh(torch.sum(hidden_2, 2))
         static_sum = static_sum.unsqueeze(2).expand_as(hidden_1)
         hidden = torch.cat((hidden_1, static_sum), dim=1)
         output = F.relu(self.fc1(hidden))
