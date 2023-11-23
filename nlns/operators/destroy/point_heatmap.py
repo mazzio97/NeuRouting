@@ -8,6 +8,13 @@ from nlns.operators import LNSOperator
 from nlns.instances import VRPInstance, VRPSolution
 
 
+def _softmax(x: np.ndarray) -> np.ndarray:
+    """Numpy based softmax."""
+    shifted_x = x - x.max()
+    numerator = np.exp(shifted_x)
+    return numerator / numerator.sum()
+
+
 class PointHeatmapDestroy(LNSOperator):
     """ """
 
@@ -32,22 +39,29 @@ class PointHeatmapDestroy(LNSOperator):
     def destroy_single(self, solution: VRPSolution) -> VRPSolution:
         """Destroy a single given solution."""
         instance = solution.instance
-        heatmap = self.heatmaps_map[instance]
-        # Mask (with a very high value) edges which are not in the
+        heatmap = 1 - self.heatmaps_map[instance]
+        # Mask (with a very negative value) edges which are not in the
         # examined solution
-        solution_heatmap = (heatmap + np.inf
-                            * (solution.adjacency_matrix() == 0))
-        # Find lowest scoring edge
-        from_node, to_node = np.unravel_index(solution_heatmap.argmin(),
-                                              heatmap.shape)
-        # Instance customers are not stored in a numpy array, so we
-        # manually compute the average here, which should still be
-        # more efficient than allocating new numpy arrays to do it.
-        # On the other hand, the PointDestroy implementation used right
-        # below ignores such considerations and allocates a lot of
+        solution_heatmap = _softmax(
+            (heatmap + -1e12 * (solution.adjacency_matrix() == 0)).flatten())
+        # Sample to find a likely low-probable edge
+        sampled_edge, = self.rng.choices(range(heatmap.size),
+                                         solution_heatmap)
+        from_node, to_node = np.unravel_index(sampled_edge, heatmap.shape)
+
+        # Instance customers are not guaranteed to be stored in a numpy
+        # array, so we manually compute the average here, which should
+        # still be more efficient than allocating new numpy arrays to do
+        # it. On the other hand, the PointDestroy implementation used
+        # right below ignores such considerations and allocates a lot of
         # random stuff.
-        from_position = instance.customers[from_node]
-        to_position = instance.customers[to_node]
+        # -1 to the node ids to account for the depot
+        from_position = instance.customers[from_node - 1]
+        if from_node == 0:
+            from_position = instance.depot
+        to_position = instance.customers[to_node - 1]
+        if to_node == 0:
+            to_position = instance.depot
         destroy_point = ((from_position[0] + to_position[0]) / 2,
                          (from_position[1] + to_position[1]) / 2)
 
