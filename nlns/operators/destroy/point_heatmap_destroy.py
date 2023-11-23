@@ -1,3 +1,8 @@
+"""Legacy implementation of the point heatmap destroy.
+
+This is not currently working, a similar implementation can be found
+at :mod:`nlns.operators.destroy.point_heatmap`.
+"""
 from typing import Tuple, List
 
 from copy import deepcopy
@@ -52,7 +57,7 @@ class HeatmapPointDestroy(DestroyProcedure):
         prob_norm = solution_edges_prob / solution_edges_prob.sum()  # normalization
 
         # randomly sample edges to remove
-        n_edges = solution_edges.shape[0] 
+        n_edges = solution_edges.shape[0]
         n_remove = int(n_edges * self.percentage)
         to_remove_idx = np.unravel_index(np.random.choice(range(n_edges), size=1, p=prob_norm),
                                          prob.shape)
@@ -85,7 +90,7 @@ class HeatmapPointDestroy(DestroyProcedure):
 
         solution_copies = [deepcopy(s) for s in solutions]
         batch = collate_fn(solution_copies, num_neighbors=num_neighbors)
-        
+
         with torch.no_grad():
             preds, _ = self.heatmap_model(batch)
 
@@ -96,5 +101,5 @@ class HeatmapPointDestroy(DestroyProcedure):
         return solution_copies
 
 
-    
-        
+
+
