@@ -212,14 +212,15 @@ class VRPSolution:
                 for route in self.complete_routes() + self.incomplete_routes()
                 for from_id, to_id in zip(route[:-1], route[1:])]
 
-    def adjacency_matrix(self) -> np.ndarray:
+    def adjacency_matrix(self, symmetric=True) -> np.ndarray:
         """Retrieve solution in form on a numpy adjacency matrix."""
         adj = np.zeros((self.instance.n_customers + 1,
                         self.instance.n_customers + 1), dtype=int)
         for i, j in self.as_edges():
             # nodes_target[i] = idx  # node targets: ordering of nodes in tour
             adj[i][j] = 1
-            adj[j][i] = 1
+            if symmetric:
+                adj[j][i] = 1
         return adj
 
     def isolated_customers(self) -> List[int]:
