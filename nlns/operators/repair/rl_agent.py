@@ -74,9 +74,9 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
 
         static_input = torch.from_numpy(static_input).to(self.device).float()
         dynamic_input = torch.from_numpy(dynamic_input).to(self.device).long()
-        # Assumes that the vehicle capacity is identical for all the
-        # incomplete solutions
-        capacity = solutions[0].instance.capacity
+        capacity = np.fromiter(
+            (solution.instance.capacity for solution in solutions),
+            dtype=float)[:, np.newaxis]
 
         cost_estimate = None
         if self.critic is not None:
@@ -215,7 +215,7 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
             # Rescale customer demand based on vehicle capacity
             dynamic_input_float = dynamic_input.float()
             dynamic_input_float[:, :, 0] = (dynamic_input_float[:, :, 0]
-                                            / float(vehicle_capacity))
+                                            / vehicle_capacity)
 
             origin_static_input = static_input[torch.arange(batch_size),
                                                origin_idx]
@@ -291,7 +291,7 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
         dynamic_input_float = dynamic_input.float()
 
         dynamic_input_float[:, :, 0] = (dynamic_input_float[:, :, 0]
-                                        / float(vehicle_capacity))
+                                        / vehicle_capacity)
 
         return self.critic.forward(static_input, dynamic_input_float).view(-1)
 
@@ -328,7 +328,7 @@ class RLAgentRepair(TorchReproducibilityMixin, Trainable, LNSOperator):
         combined_demands = (origin_demands.expand(batch_size,
                                                   dynamic_input.shape[1])
                             + dynamic_input[:, :, 0])
-        mask[combined_demands > capacity] = 0
+        mask[combined_demands.numpy() > capacity] = 0
 
         mask[:, 0] = 1  # Always allow to go to the depot
 
