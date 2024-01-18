@@ -46,9 +46,11 @@ def main(args: argparse.Namespace):
     if args.seed is not None:
         valid_seed = args.seed + 1
     dataset = tuple(generate_instances(args.train_samples, args.n_customers,
-                                       seed=args.seed))
+                                       seed=args.seed,
+                                       distribution=args.distribution))
     validation = tuple(generate_instances(args.val_samples, args.n_customers,
-                                          seed=valid_seed))
+                                          seed=valid_seed,
+                                          distribution=args.distribution))
 
     trainer = NLNSTrainer(destroy_operator, repair_operator)
     trainer.train(dataset,
@@ -94,6 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--epochs', type=int, default=50)
     parser.add_argument('-vi', '--val-interval', type=int, required=False)
     parser.add_argument('-log', '--log-interval', type=int, required=False)
+    parser.add_argument('--distribution', type=str, default='nazari',
+                        required=False)
     parser.add_argument('--wandb-name', type=str, required=False, default=None)
     parser.add_argument('--seed', type=int_or_none, required=False,
                         default=None)
