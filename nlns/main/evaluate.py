@@ -84,7 +84,7 @@ def evaluate(search: BaseLargeNeighborhoodSearch,
 
 def rlagent_checkpoint_name(destroy: str, repair: str,
                             destroy_percentage: float,
-                            customers: int) -> str:
+                            distribution: str, customers: int) -> str:
     """Retrieve a filename for the rlagent checkpoints.
 
     Current standard: ``destroyname-repairname-p0X-N``
@@ -92,10 +92,13 @@ def rlagent_checkpoint_name(destroy: str, repair: str,
     Where ``X`` is the destruction percentage and N is the number of
     customers.
     """
-    destroy_percentage
-    rlagent_basename = '-'.join((destroy, repair,
-                                 'p0' + str(round(destroy_percentage * 100)),
-                                 str(customers)))
+    name_arguments = [destroy, repair,
+                      'p0' + str(round(destroy_percentage * 100)),
+                      str(customers)]
+    if distribution != 'nazari':
+        name_arguments.insert(3, distribution)
+
+    rlagent_basename = '-'.join(name_arguments)
     return os.path.join('pretrained', rlagent_basename)
 
 
@@ -117,7 +120,7 @@ def main(namespace: Namespace):
     # based on which destroy operator and destroy percentage is used
     rlagent_checkpoint = rlagent_checkpoint_name(
         namespace.destroy, namespace.repair, namespace.destroy_percentage,
-        namespace.customers)
+        namespace.distribution, namespace.customers)
 
     repair_operator_map = {
         'scip': lambda: SCIPRepair(),
