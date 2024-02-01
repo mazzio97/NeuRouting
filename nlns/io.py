@@ -45,8 +45,10 @@ def read_vrp_str(vrp_string: str, grid_dim: int = GRID_DIM) -> VRPInstance:
         i += 1
 
     return VRPInstance(
-        depot=(_norm(locations[0][1]), _norm(locations[0][2])),
-        customers=[(_norm(loc[1]), _norm(loc[2])) for loc in locations[1:]],
+        depot=(_norm(locations[0][1], grid_dim),
+               _norm(locations[0][2], grid_dim)),
+        customers=[(_norm(loc[1], grid_dim),
+                    _norm(loc[2], grid_dim)) for loc in locations[1:]],
         demands=[d[1] for d in demands[1:]],
         capacity=capacity
     )
