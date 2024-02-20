@@ -8,7 +8,7 @@ import contextlib
 import json
 import sys
 import os.path
-from typing import Iterable, List, TextIO, Union, Tuple
+from typing import Iterable, List, TextIO, Union, Tuple, Optional
 # from statistics import mean
 from operator import attrgetter
 
@@ -54,6 +54,9 @@ class Namespace:
     neighborhood_size: int = 256
     max_time: int = 60
     max_iterations: int = 100
+
+    # Operator specific
+    rlagent_pretrained_path: Optional[str] = None
 
 
 def evaluate(search: BaseLargeNeighborhoodSearch,
@@ -117,10 +120,13 @@ def main(namespace: Namespace):
     }
 
     # Each rlagent pairing has its own checkpoint, select which one
-    # based on which destroy operator and destroy percentage is used
-    rlagent_checkpoint = rlagent_checkpoint_name(
-        namespace.destroy, namespace.repair, namespace.destroy_percentage,
-        namespace.distribution, namespace.customers)
+    # based on which destroy operator and destroy percentage is used,
+    # Unless it was manually defined by the user.
+    rlagent_checkpoint = namespace.rlagent_pretrained_path
+    if rlagent_checkpoint is None:
+        rlagent_checkpoint = rlagent_checkpoint_name(
+            namespace.destroy, namespace.repair, namespace.destroy_percentage,
+            namespace.distribution, namespace.customers)
 
     repair_operator_map = {
         'scip': lambda: SCIPRepair(),
